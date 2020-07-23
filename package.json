@@ -1,0 +1,27 @@
+{
+  "name": "cambriamerge",
+  "version": "0.0.1",
+  "main": "index.ts",
+  "license": "MIT",
+  "scripts": {
+    "test": "mocha -r ts-node/register test/micromerge.ts",
+    "build": "webpack"
+  },
+  "dependencies": {
+    "automerge": "^0.14.1",
+    "cloudina": "ssh://git@github.com:inkandswitch/cloudina.git#add-default-values",
+    "graphlib": "^2.1.8"
+  },
+  "devDependencies": {
+    "@types/graphlib": "^2.1.6",
+    "@types/mocha": "^8.0.0",
+    "@types/node": "^14.0.24",
+    "mocha": "^8.0.1",
+    "ts-loader": "^8.0.1",
+    "ts-node": "^8.10.2",
+    "typescript": "^3.9.7",
+    "webpack": "^4.43.0",
+    "webpack-cli": "^3.3.12",
+    "webpack-dev-server": "^3.11.0"
+  }
+}
