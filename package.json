@@ -4,7 +4,7 @@
   "main": "index.ts",
   "license": "MIT",
   "scripts": {
-    "test": "mocha -r ts-node/register test/micromerge.ts",
+    "test": "mocha -r ts-node/register test/cambriamerge.ts",
     "build": "webpack"
   },
   "dependencies": {
