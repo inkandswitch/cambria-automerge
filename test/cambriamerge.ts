@@ -117,5 +117,10 @@ describe("Has basic schema tools", () => {
         },
       },
     ]);
+    assert.deepEqual(patch3.diffs, {
+      objectId: '00000000-0000-0000-0000-000000000000',
+      props: { title: { '3@111111': { value: 'hello' } } },
+      type: 'map'
+    })
   });
 });

@@ -222,10 +222,50 @@ export class CambriaState {
       .sort((a, b) => (a === schema ? 1 : -1));
   }
 
+  convertChange(change: AutomergeChange, to: string) : Change {
+    // unimplemented!()
+    throw new RangeError("unimplemented")
+  }
+
   applySchemaChanges(
     blocks: CambriaBlock[],
     schemas: string[]
   ): AutomergePatch {
+
+    const changesToApply : Change[] = []
+
+    for (let block of blocks) {
+      if (block.kind === "lens") {
+        this.addLens(block.from, block.to, block.lens);
+        continue;
+      }
+
+      if (block.schema === this.schema) {
+        changesToApply.push(block.change)
+      } else {
+        const newChange = this.convertChange(block,this.schema)
+        changesToApply.push(newChange)
+      }
+    }
+
+    const instance = this.getInstance(this.schema)
+
+    if (!instance.bootstraped) {
+      const bootstrapChange = this.bootstrap(this.schema)
+      changesToApply.unshift(bootstrapChange)
+      instance.bootstraped = true
+    }
+
+    const [newDoc, patch] = Backend.applyChanges(instance.doc, changesToApply.map(encodeChange));
+    instance.doc = newDoc
+    instance.deps = patch.deps
+
+    // instance.startOp = ...  
+
+    return patch
+  }
+
+/*
     const instanceCache = {};
     const opCache = {};
     const changeCache = {};
@@ -319,6 +359,7 @@ export class CambriaState {
 
     return finalPatch;
   }
+*/
 
   convertOp(op: Op, from: Instance, to: Instance): Op[] {
     // FIXME
@@ -360,14 +401,14 @@ export class CambriaState {
   private getInstance(schema: string): Backend.BackendState {
     if (!this.instances[schema]) {
       const doc = new Backend.init();
-      const instance = { doc, seq: 1, deps: [], startOp: 1, schema };
-      this.bootstrap(instance, schema);
+      const instance = { doc, seq: 1, deps: [], startOp: 1, schema, bootstraped: false };
+      //this.bootstrap(instance, schema);
       this.instances[schema] = instance;
     }
     return this.instances[schema];
   }
 
-  private bootstrap(instance: Backend.BackendState, schema: string) {
+  private bootstrap(schema: string) : Change {
     const urOp = [{ op: "add" as const, path: "", value: {} }];
     const jsonschema7 = this.jsonschema7[schema];
     const defaultsPatch = applyLensToPatch([], urOp, jsonschema7).slice(1);
@@ -375,10 +416,7 @@ export class CambriaState {
       CAMBRIA_MAGIC_ACTOR,
       defaultsPatch
     );
-    const [newDoc, patch] = Backend.applyChanges(instance.doc, [
-      encodeChange(bootstrapChange),
-    ]);
-    instance.doc = newDoc;
+    return bootstrapChange
   }
 
   get schemas(): string[] {
