@@ -13,6 +13,7 @@ import {
   applyChanges,
   applyLocalChange,
   getChanges,
+  CAMBRIA_MAGIC_ACTOR,
 } from "../src/index";
 
 export interface ProjectV1 {
@@ -45,6 +46,7 @@ function deepInspect(object: any) {
 
 describe("cambriamerge", () => {
   it("can bootstrap a new doc", () => {
+    const actorId = "1234"; // todo: is this a valid actorId?
     let doc = init({ schema: "projectv1" });
 
     doc = registerLens(doc, "mu", "projectv1", [
@@ -57,18 +59,16 @@ describe("cambriamerge", () => {
         kind: "change" as const,
         schema: "projectv1",
         change: {
-          requestType: "change",
-          actor: "1234",
+          message: "",
+          actor: actorId,
           seq: 0,
-          deps: {},
+          deps: [],
           ops: [
             {
               action: "makeMap",
-              // obj: UUID
-              // key?: string
-              // value?: any
-              // datatype?: DataType
-              // elem?: number
+              obj: ROOT_ID,
+              key: "test",
+              insert: false,
             },
           ],
         },
