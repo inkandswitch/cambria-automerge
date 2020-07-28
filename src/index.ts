@@ -1,6 +1,6 @@
 import { Graph, alg } from "graphlib";
 
-import { Set } from 'immutable'
+import { Set } from "immutable";
 
 // This import doesn't pull in types for the Backend functions,
 // maybe because we're importing from a non-root file?
@@ -224,30 +224,31 @@ export class CambriaState {
       .sort((a, b) => (a === schema ? 1 : -1));
   }
 
-  convertOp(op: Op, from: Instance, to: Instance) : Op[] {
-    const lensStack = this.lensesFromTo(from.schema, to.schema)
-    const jsonschema7 = this.jsonschema7[from.schema]
-    const patch = opToPatch(op,from)
-    const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7)
-    const ops = patchToOps(convertedPatch,to)
-    return ops
+  convertOp(op: Op, from: Instance, to: Instance): Op[] {
+    const lensStack = this.lensesFromTo(from.schema, to.schema);
+    const jsonschema7 = this.jsonschema7[from.schema];
+    const patch = opToPatch(op, from);
+    const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
+    const convertedOps = patchToOps(convertedPatch, to);
+
+    console.log("convertOp", { op, patch, convertedPatch, convertedOps });
+
+    return convertedOps;
   }
 
   convertChange(block: AutomergeChange, to: string): Change {
-
     const lensStack = this.lensesFromTo(block.schema, to);
 
-    const ops : Op[] = []
+    const ops: Op[] = [];
 
-    let from_instance = this.cloneInstance(block.schema)
-    let to_instance = this.cloneInstance(to)
+    let from_instance = this.cloneInstance(block.schema);
+    let to_instance = this.cloneInstance(to);
 
     for (let op of block.change.ops) {
       const convertedOps = this.convertOp(op, from_instance, to_instance);
-      console.log(deepInspect({ op, converted: convertedOps }))
-      ops.push(... convertedOps)
-      from_instance = this.applyOps(from_instance, [op])
-      to_instance = this.applyOps(to_instance, convertedOps)
+      ops.push(...convertedOps);
+      from_instance = this.applyOps(from_instance, [op]);
+      to_instance = this.applyOps(to_instance, convertedOps);
     }
 
     /*
@@ -271,10 +272,10 @@ export class CambriaState {
       seq: block.change.seq,
       time: block.change.time,
       startOp: 3, // FIXME
-      deps: [ 'xxxxxx' ] 
+      deps: ["xxxxxx"],
     };
 
-    return change
+    return change;
   }
 
   applyOps(instance: Instance, ops: Op[]): Instance {
@@ -283,7 +284,7 @@ export class CambriaState {
       ops,
       message: "",
       actor: CAMBRIA_MAGIC_ACTOR,
-      seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0)+ 1,
+      seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0) + 1,
       time: 0,
       startOp: instance.maxOp + 1,
       deps: instance.deps,
@@ -300,7 +301,6 @@ export class CambriaState {
     instance: Instance,
     changes: Change[]
   ): [Instance, AutomergePatch] {
-
     // FIXME
     //fillOutDeps(instance.deps, changesToApply)
     //fillOutStartOps()
@@ -491,8 +491,8 @@ export class CambriaState {
 */
 
   private cloneInstance(schema: string): Backend.BackendState {
-    const instance = this.getInstance(schema)
-    return { ... instance, state: Backend.clone(instance.state) }
+    const instance = this.getInstance(schema);
+    return { ...instance, state: Backend.clone(instance.state) };
   }
 
   private getInstance(schema: string): Backend.BackendState {
@@ -547,7 +547,6 @@ export class CambriaState {
 }
 
 function patchToOps(patch: CloudinaPatch, instance: Instance): Backend.Change {
-  console.log(deepInspect({ patch }))
   const opCache = {};
   const ops = patch.map((patchop, i) => {
     let action;
@@ -573,20 +572,20 @@ function patchToOps(patch: CloudinaPatch, instance: Instance): Backend.Change {
       throw new RangeError(`bad op type for patchop=${deepInspect(patchop)}`);
     }
 
-    let key = patchop.path.split("/").slice(-1)[0]
+    let key = patchop.path.split("/").slice(-1)[0];
 
-    const opSet = (instance.state as any).state
+    const opSet = (instance.state as any).state;
 
-    const obj = ROOT_ID
+    const obj = ROOT_ID;
 
-    const objIsList = false // FIXME
+    const objIsList = false; // FIXME
 
     if (objIsList) {
-        key = key // FIXME 
+      key = key; // FIXME
     }
 
     //const insert = patchop.op === "add" && obj !== ROOT_ID && objIsList
-    const insert = false // FIXME
+    const insert = false; // FIXME
 
     if (patchop.op === "add" || patchop.op === "replace") {
       return { action, obj, key, insert, value: patchop.value, pred: [] };
@@ -598,7 +597,10 @@ function patchToOps(patch: CloudinaPatch, instance: Instance): Backend.Change {
   return ops;
 }
 
-function buildBootstrapChange(actor: string, patch: CloudinaPatch): Backend.Change {
+function buildBootstrapChange(
+  actor: string,
+  patch: CloudinaPatch
+): Backend.Change {
   const opCache = {};
   const pathToOpId = { [""]: ROOT_ID };
   const ops = patch.map((patchop, i) => {
@@ -733,20 +735,19 @@ function parseOpId(opid: string): { counter: number; actor: string } {
   return { counter, actor };
 }
 
-export function buildPath(op: Op, instance: Instance) : string {
-  const backendState : any = instance.state
-  const opSet = backendState.state
-  let obj = op.obj
-  let path : string[] = []
+export function buildPath(op: Op, instance: Instance): string {
+  const backendState: any = instance.state;
+  const opSet = backendState.state;
+  let obj = op.obj;
+  let path: string[] = [];
   while (obj !== ROOT_ID) {
-    const ref = opSet.getIn(['byObject', obj, '_inbound'], Set()).first()
-    if (!ref) throw new RangeError(`No path found to object ${obj}`)
-    path.unshift(ref as string)
-    obj = ref.get('obj')
+    const ref = opSet.getIn(["byObject", obj, "_inbound"], Set()).first();
+    if (!ref) throw new RangeError(`No path found to object ${obj}`);
+    path.unshift(ref as string);
+    obj = ref.get("obj");
   }
-  const finalPath = "/" + path.join("/") + op.key
-  console.log(deepInspect({ finalPath }))
-  return finalPath
+  const finalPath = "/" + path.join("/") + op.key;
+  return finalPath;
 }
 
 export function opToPatch(op: Op, instance: Instance): CloudinaPatch {
@@ -754,7 +755,7 @@ export function opToPatch(op: Op, instance: Instance): CloudinaPatch {
     case "set": {
       const path = buildPath(op, instance);
       const { value } = op;
-      const action = op.insert ? "add" : "replace"
+      const action = op.insert ? "add" : "replace";
       return [{ op: action, path, value }];
     }
     case "del": {
