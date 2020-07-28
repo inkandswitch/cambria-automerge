@@ -61,22 +61,13 @@ export interface AutomergeChange {
 export type InitOptions = {
   actorId?: string;
   schema?: string;
+  lenses?: RegisteredLens[];
   deferActorId?: boolean;
   freeze?: boolean;
 };
 
 export function init(options: InitOptions = {}): CambriaState {
-  return new CambriaState(options.schema || "mu");
-}
-
-export function registerLens(
-  doc: CambriaState,
-  from: string,
-  to: string,
-  lenses: LensSource
-): CambriaState {
-  doc.registerLens(from, to, lenses);
-  return doc;
+  return new CambriaState(options);
 }
 
 export function applyChanges(
@@ -121,8 +112,8 @@ export class CambriaState {
   private graph: Graph;
   private jsonschema7: { [schema: string]: JSONSchema7 };
 
-  constructor(schema: string) {
-    this.schema = schema;
+  constructor(opts: InitOptions) {
+    this.schema = opts.schema || "mu";
     this.history = [];
     this.instances = {};
     //this.seq = 0
@@ -132,6 +123,10 @@ export class CambriaState {
     this.graph = new Graph();
     this.jsonschema7 = { mu: emptySchema };
     this.graph.setNode("mu", true);
+
+    for(let lens of (opts.lenses || [])) {
+      this.addLens(lens)
+    }
   }
 
   applyLocalChange(request: Backend.Request): AutomergePatch {
@@ -173,33 +168,29 @@ export class CambriaState {
     this.instances = {};
   }
 
-  addLens(from: string, to: string, lenses: LensSource) {
-    // turn this into a change - make sure it gets fed back into the network like applyLocalChange in hypermerge
+  addLens(block: RegisteredLens) {
+    const from = block.from
+    const to = block.to
+    const lens = block.lens
+
+    // we reqire for now that lenses be loaded in the right order - from before to
     if (!this.graph.node(from)) {
       throw new RangeError(`unknown schema ${from}`);
     }
 
+    // if to exists this is a dup - ignore
     if (this.graph.node(to)) {
-      throw new RangeError(`already have a schema named ${to}`);
+      return
     }
 
     // if there's already a lens between two schemas, don't add this new one
     // if (this.graph.edge({ v: lens.source, w: lens.destination })) return
 
     this.graph.setNode(to, true);
-    this.graph.setEdge(from, to, lenses);
-    this.graph.setEdge(to, from, reverseLens(lenses));
+    this.graph.setEdge(from, to, lens);
+    this.graph.setEdge(to, from, reverseLens(lens));
 
-    this.jsonschema7[to] = updateSchema(this.jsonschema7[from], lenses);
-  }
-
-  registerLens(from: string, to: string, lenses: LensSource) {
-    this.addLens(from, to, lenses);
-
-    // FIXME - also write to history - update deps
-
-    this.reset();
-    this.applySchemaChanges(this.history, this.schemas);
+    this.jsonschema7[to] = updateSchema(this.jsonschema7[from], lens);
   }
 
   // take a change and apply it everywhere
@@ -222,9 +213,34 @@ export class CambriaState {
       .sort((a, b) => (a === schema ? 1 : -1));
   }
 
-  convertChange(change: AutomergeChange, to: string) : Change {
-    // unimplemented!()
-    throw new RangeError("unimplemented")
+  convertChange(block: AutomergeChange, to: string) : Change {
+    const lensStack = this.lensesFromTo(block.schema, to)
+
+    throw new RangeError("unimplemented!")
+      /*
+    const from = this.getInstanceAtSeq(block.schema, block.seq) // assume clones
+    const to = this.getInstanceAtSeq(to, block.seq)
+
+    const ops = []
+
+    for (let op of block.change.ops) {
+      const convertedOps = this.convertOp(op, from, to);
+      ops.push(... convertedOps)
+      from = this.applyOps(from, [op])
+      to = this.applyOps(to, convertedOps)
+    }
+
+    // save cange to getInstanceAtSeq can do something with it
+
+    return {
+      seq: block.seq,
+      deps: [] /// calc_deps
+      startOp: 0,
+      time: 0,
+      actor: block.change.actor,
+      ops
+    }
+       */
   }
 
   applySchemaChanges(
@@ -236,7 +252,7 @@ export class CambriaState {
 
     for (let block of blocks) {
       if (block.kind === "lens") {
-        this.addLens(block.from, block.to, block.lens);
+        this.addLens(block)
         continue;
       }
 
