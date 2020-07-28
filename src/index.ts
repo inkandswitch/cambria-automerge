@@ -124,8 +124,8 @@ export class CambriaState {
     this.jsonschema7 = { mu: emptySchema };
     this.graph.setNode("mu", true);
 
-    for(let lens of (opts.lenses || [])) {
-      this.addLens(lens)
+    for (let lens of opts.lenses || []) {
+      this.addLens(lens);
     }
   }
 
@@ -169,9 +169,9 @@ export class CambriaState {
   }
 
   addLens(block: RegisteredLens) {
-    const from = block.from
-    const to = block.to
-    const lens = block.lens
+    const from = block.from;
+    const to = block.to;
+    const lens = block.lens;
 
     // we reqire for now that lenses be loaded in the right order - from before to
     if (!this.graph.node(from)) {
@@ -180,7 +180,7 @@ export class CambriaState {
 
     // if to exists this is a dup - ignore
     if (this.graph.node(to)) {
-      return
+      return;
     }
 
     // if there's already a lens between two schemas, don't add this new one
@@ -213,11 +213,11 @@ export class CambriaState {
       .sort((a, b) => (a === schema ? 1 : -1));
   }
 
-  convertChange(block: AutomergeChange, to: string) : Change {
-    const lensStack = this.lensesFromTo(block.schema, to)
+  convertChange(block: AutomergeChange, to: string): Change {
+    const lensStack = this.lensesFromTo(block.schema, to);
 
-    throw new RangeError("unimplemented!")
-      /*
+    throw new RangeError("unimplemented!");
+    /*
     const from = this.getInstanceAtSeq(block.schema, block.seq) // assume clones
     const to = this.getInstanceAtSeq(to, block.seq)
 
@@ -247,41 +247,43 @@ export class CambriaState {
     blocks: CambriaBlock[],
     schemas: string[]
   ): AutomergePatch {
-
-    const changesToApply : Change[] = []
+    const changesToApply: Change[] = [];
 
     for (let block of blocks) {
       if (block.kind === "lens") {
-        this.addLens(block)
+        this.addLens(block);
         continue;
       }
 
       if (block.schema === this.schema) {
-        changesToApply.push(block.change)
+        changesToApply.push(block.change);
       } else {
-        const newChange = this.convertChange(block,this.schema)
-        changesToApply.push(newChange)
+        const newChange = this.convertChange(block, this.schema);
+        changesToApply.push(newChange);
       }
     }
 
-    const instance = this.getInstance(this.schema)
+    const instance = this.getInstance(this.schema);
 
     if (!instance.bootstraped) {
-      const bootstrapChange = this.bootstrap(this.schema)
-      changesToApply.unshift(bootstrapChange)
-      instance.bootstraped = true
+      const bootstrapChange = this.bootstrap(this.schema);
+      changesToApply.unshift(bootstrapChange);
+      instance.bootstraped = true;
     }
 
-    const [newDoc, patch] = Backend.applyChanges(instance.doc, changesToApply.map(encodeChange));
-    instance.doc = newDoc
-    instance.deps = patch.deps
+    const [newDoc, patch] = Backend.applyChanges(
+      instance.doc,
+      changesToApply.map(encodeChange)
+    );
+    instance.doc = newDoc;
+    instance.deps = patch.deps;
 
-    // instance.startOp = ...  
+    // instance.startOp = ...
 
-    return patch
+    return patch;
   }
 
-/*
+  /*
     const instanceCache = {};
     const opCache = {};
     const changeCache = {};
@@ -417,14 +419,21 @@ export class CambriaState {
   private getInstance(schema: string): Backend.BackendState {
     if (!this.instances[schema]) {
       const doc = new Backend.init();
-      const instance = { doc, seq: 1, deps: [], startOp: 1, schema, bootstraped: false };
+      const instance = {
+        doc,
+        seq: 1,
+        deps: [],
+        startOp: 1,
+        schema,
+        bootstraped: false,
+      };
       //this.bootstrap(instance, schema);
       this.instances[schema] = instance;
     }
     return this.instances[schema];
   }
 
-  private bootstrap(schema: string) : Change {
+  private bootstrap(schema: string): Change {
     const urOp = [{ op: "add" as const, path: "", value: {} }];
     const jsonschema7 = this.jsonschema7[schema];
     const defaultsPatch = applyLensToPatch([], urOp, jsonschema7).slice(1);
@@ -432,14 +441,14 @@ export class CambriaState {
       CAMBRIA_MAGIC_ACTOR,
       defaultsPatch
     );
-    return bootstrapChange
+    return bootstrapChange;
   }
 
   get schemas(): string[] {
     return this.graph.nodes();
   }
 
-  private lensesFromTo(from: string, to: string): LensSource {
+  public lensesFromTo(from: string, to: string): LensSource {
     const migrationPaths = alg.dijkstra(this.graph, to);
     const lenses: LensOp[] = [];
     if (migrationPaths[from].distance == Infinity) {
