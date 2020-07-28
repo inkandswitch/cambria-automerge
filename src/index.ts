@@ -234,11 +234,21 @@ export class CambriaState {
   }
 
   convertChange(block: AutomergeChange, to: string): Change {
+
     const lensStack = this.lensesFromTo(block.schema, to);
 
-    const ops = []
+    const ops : Op[] = []
 
-    throw new RangeError("unimplemented!");
+    let from_instance = this.cloneInstance(block.schema)
+    let to_instance = this.cloneInstance(to)
+
+    for (let op of block.change.ops) {
+      const convertedOps = this.convertOp(op, from_instance, to_instance);
+      console.log(deepInspect({ op, converted: convertedOps }))
+      ops.push(... convertedOps)
+      from_instance = this.applyOps(from_instance, [op])
+      to_instance = this.applyOps(to_instance, convertedOps)
+    }
 
     /*
     const from = this.getInstanceAtSeq(block.schema, block.seq) // assume clones
@@ -252,19 +262,19 @@ export class CambriaState {
     }
 
     // save cange to getInstanceAtSeq can do something with it
-    
+    */
+
     const change = {
       ops,
-      message: block.change.message
+      message: block.change.message,
       actor: block.change.actor,
       seq: block.change.seq,
       time: block.change.time,
-      startOp: instance.maxOp + 1,
-      deps: // FIXME
+      startOp: 3, // FIXME
+      deps: [ 'xxxxxx' ] 
     };
 
     return change
-       */
   }
 
   applyOps(instance: Instance, ops: Op[]): Instance {
@@ -273,7 +283,7 @@ export class CambriaState {
       ops,
       message: "",
       actor: CAMBRIA_MAGIC_ACTOR,
-      seq: instance.clock[CAMBRIA_MAGIC_ACTOR] + 1,
+      seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0)+ 1,
       time: 0,
       startOp: instance.maxOp + 1,
       deps: instance.deps,
@@ -290,6 +300,12 @@ export class CambriaState {
     instance: Instance,
     changes: Change[]
   ): [Instance, AutomergePatch] {
+
+    // FIXME
+    //fillOutDeps(instance.deps, changesToApply)
+    //fillOutStartOps()
+    //fillOutPred()
+
     const [backendState, patch] = Backend.applyChanges(
       instance.state,
       changes.map(encodeChange)
@@ -474,6 +490,11 @@ export class CambriaState {
   }
 */
 
+  private cloneInstance(schema: string): Backend.BackendState {
+    const instance = this.getInstance(schema)
+    return { ... instance, state: Backend.clone(instance.state) }
+  }
+
   private getInstance(schema: string): Backend.BackendState {
     if (!this.instances[schema]) {
       const state = new Backend.init();
@@ -526,6 +547,7 @@ export class CambriaState {
 }
 
 function patchToOps(patch: CloudinaPatch, instance: Instance): Backend.Change {
+  console.log(deepInspect({ patch }))
   const opCache = {};
   const ops = patch.map((patchop, i) => {
     let action;
@@ -555,7 +577,7 @@ function patchToOps(patch: CloudinaPatch, instance: Instance): Backend.Change {
 
     const opSet = (instance.state as any).state
 
-    const obj = '' // FIXME
+    const obj = ROOT_ID
 
     const objIsList = false // FIXME
 
