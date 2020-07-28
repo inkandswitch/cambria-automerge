@@ -272,7 +272,7 @@ export class CambriaState {
       seq: block.change.seq,
       time: block.change.time,
       startOp: 3, // FIXME
-      deps: ["xxxxxx"],
+      deps: ["aaaaaa"], // FIXME
     };
 
     return change;
