@@ -1,6 +1,6 @@
 import { Graph, alg } from "graphlib";
 import * as Backend from "automerge/backend";
-import { Op, Clock, Change } from "automerge/backend";
+import { Op, Clock, Change } from "automerge";
 import { encodeChange, decodeChange } from "automerge";
 import { JSONSchema7 } from "json-schema";
 import {
