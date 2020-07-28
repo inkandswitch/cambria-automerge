@@ -1,4 +1,7 @@
 import { Graph, alg } from "graphlib";
+
+import { Set } from 'immutable'
+
 // This import doesn't pull in types for the Backend functions,
 // maybe because we're importing from a non-root file?
 import * as Backend from "automerge/backend";
@@ -12,7 +15,7 @@ import {
 import { encodeChange, decodeChange } from "automerge";
 import { JSONSchema7 } from "json-schema";
 import {
-  Patch,
+  Patch as CloudinaPatch,
   LensSource,
   LensOp,
   updateSchema,
@@ -221,15 +224,25 @@ export class CambriaState {
       .sort((a, b) => (a === schema ? 1 : -1));
   }
 
+  convertOp(op: Op, from: Instance, to: Instance) : Op[] {
+    const lensStack = this.lensesFromTo(from.schema, to.schema)
+    const jsonschema7 = this.jsonschema7[from.schema]
+    const patch = opToPatch(op,from)
+    const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7)
+    const ops = patchToOps(convertedPatch,to)
+    return ops
+  }
+
   convertChange(block: AutomergeChange, to: string): Change {
     const lensStack = this.lensesFromTo(block.schema, to);
 
+    const ops = []
+
     throw new RangeError("unimplemented!");
+
     /*
     const from = this.getInstanceAtSeq(block.schema, block.seq) // assume clones
     const to = this.getInstanceAtSeq(to, block.seq)
-
-    const ops = []
 
     for (let op of block.change.ops) {
       const convertedOps = this.convertOp(op, from, to);
@@ -239,15 +252,18 @@ export class CambriaState {
     }
 
     // save cange to getInstanceAtSeq can do something with it
-
-    return {
-      seq: block.seq,
-      deps: [] /// calc_deps
-      startOp: 0,
-      time: 0,
+    
+    const change = {
+      ops,
+      message: block.change.message
       actor: block.change.actor,
-      ops
-    }
+      seq: block.change.seq,
+      time: block.change.time,
+      startOp: instance.maxOp + 1,
+      deps: // FIXME
+    };
+
+    return change
        */
   }
 
@@ -426,11 +442,6 @@ export class CambriaState {
   }
 */
 
-  convertOp(op: Op, from: Instance, to: Instance): Op[] {
-    // FIXME
-    return [];
-  }
-
   /*
   applyChange2(change: Change) {
     this.history.push(change)
@@ -514,7 +525,58 @@ export class CambriaState {
   }
 }
 
-function buildBootstrapChange(actor: string, patch: Patch): Backend.Change {
+function patchToOps(patch: CloudinaPatch, instance: Instance): Backend.Change {
+  const opCache = {};
+  const ops = patch.map((patchop, i) => {
+    let action;
+    if (patchop.op === "remove") {
+      action = "del";
+    } else if (patchop.op === "add" || patchop.op === "replace") {
+      if (
+        patchop.value === null ||
+        ["string", "number", "boolean"].includes(typeof patchop.value)
+      ) {
+        action = "set";
+      } else if (Array.isArray(patchop.value)) {
+        action = "makeList";
+      } else if (
+        typeof patchop.value === "object" &&
+        Object.keys(patchop.value).length === 0
+      ) {
+        action = "makeMap";
+      } else {
+        throw new RangeError(`bad value for patchop=${deepInspect(patchop)}`);
+      }
+    } else {
+      throw new RangeError(`bad op type for patchop=${deepInspect(patchop)}`);
+    }
+
+    let key = patchop.path.split("/").slice(-1)[0]
+
+    const opSet = (instance.state as any).state
+
+    const obj = '' // FIXME
+
+    const objIsList = false // FIXME
+
+    if (objIsList) {
+        key = key // FIXME 
+    }
+
+    //const insert = patchop.op === "add" && obj !== ROOT_ID && objIsList
+    const insert = false // FIXME
+
+    if (patchop.op === "add" || patchop.op === "replace") {
+      return { action, obj, key, insert, value: patchop.value, pred: [] };
+    } else {
+      return { action, obj, key, insert, pred: [] };
+    }
+  });
+
+  return ops;
+}
+
+function buildBootstrapChange(actor: string, patch: CloudinaPatch): Backend.Change {
   const opCache = {};
   const pathToOpId = { [""]: ROOT_ID };
   const ops = patch.map((patchop, i) => {
@@ -580,7 +642,7 @@ function buildBootstrapChange(actor: string, patch: Patch): Backend.Change {
       return op;
     }
   });
-  const op = {
+  const change = {
     actor,
     message: "",
     deps: [],
@@ -589,12 +651,12 @@ function buildBootstrapChange(actor: string, patch: Patch): Backend.Change {
     time: 0,
     ops,
   };
-  return op;
+  return change;
 }
 
 function applyPatch(
   instance: Backend.BackendState,
-  patch: Patch,
+  patch: CloudinaPatch,
   incomingOpId: string
 ): Op[] {
   let { counter, actor } = parseOpId(incomingOpId);
@@ -649,19 +711,28 @@ function parseOpId(opid: string): { counter: number; actor: string } {
   return { counter, actor };
 }
 
-function setAction(op: Op, instance: Backend.BackendState): "add" | "replace" {
-  if (Array.isArray(instance.byObjId[op.obj])) {
-    return op.insert ? "add" : "replace";
+export function buildPath(op: Op, instance: Instance) : string {
+  const backendState : any = instance.state
+  const opSet = backendState.state
+  let obj = op.obj
+  let path : string[] = []
+  while (obj !== ROOT_ID) {
+    const ref = opSet.getIn(['byObject', obj, '_inbound'], Set()).first()
+    if (!ref) throw new RangeError(`No path found to object ${obj}`)
+    path.unshift(ref as string)
+    obj = ref.get('obj')
   }
-  return instance.metadata[op.obj][op.key] ? "replace" : "add";
+  const finalPath = "/" + path.join("/") + op.key
+  console.log(deepInspect({ finalPath }))
+  return finalPath
 }
 
-export function opToPatch(op: Op, instance: Backend.BackendState): Patch {
+export function opToPatch(op: Op, instance: Instance): CloudinaPatch {
   switch (op.action) {
     case "set": {
       const path = buildPath(op, instance);
       const { value } = op;
-      const action = setAction(op, instance);
+      const action = op.insert ? "add" : "replace"
       return [{ op: action, path, value }];
     }
     case "del": {
@@ -671,24 +742,6 @@ export function opToPatch(op: Op, instance: Backend.BackendState): Patch {
     default:
       throw new RangeError(`unsupported op ${deepInspect(op)}`);
   }
-}
-
-function buildPath(op: Op, instance: Backend.BackendState): string {
-  let { obj } = op;
-  let { key } = op;
-  const path: (string | number)[] = [];
-  while (obj !== ROOT_ID) {
-    if (Array.isArray(instance.byObjId[op.obj])) {
-      const { visible } = instance.findListElement(op.obj, op.key);
-      path.push(visible);
-    } else {
-      path.push(key);
-    }
-    ({ key, obj } = instance.ops[obj]);
-  }
-  path.push(key);
-  path.reverse();
-  return `/${path.join("/")}`;
 }
 
 function calcDeps(change: Change, deps: Clock): Clock {
