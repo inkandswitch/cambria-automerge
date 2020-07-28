@@ -1,6 +1,14 @@
 import { Graph, alg } from "graphlib";
+// This import doesn't pull in types for the Backend functions,
+// maybe because we're importing from a non-root file?
 import * as Backend from "automerge/backend";
-import { Op, Clock, Change, Patch as AutomergePatch } from "automerge";
+import {
+  Op,
+  Clock,
+  Change,
+  Patch as AutomergePatch,
+  BackendState,
+} from "automerge";
 import { encodeChange, decodeChange } from "automerge";
 import { JSONSchema7 } from "json-schema";
 import {
@@ -35,12 +43,12 @@ const emptySchema = {
 type Hash = string;
 
 export interface Instance {
-  //clock : Clock,
+  clock: Clock;
   schema: string;
   deps: Hash[];
-  seq: number;
-  startOp: number;
-  doc: Backend.BackendState;
+  // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
+  maxOp: number;
+  state: BackendState;
 }
 
 export type CambriaBlock = AutomergeChange | RegisteredLens;
@@ -140,9 +148,9 @@ export class CambriaState {
 
     const oldDeps = instance.deps;
 
-    const [doc, patch] = Backend.applyLocalChange(instance.doc, request);
+    const [state, patch] = Backend.applyLocalChange(instance.state, request);
 
-    const changes = Backend.getChanges(doc, oldDeps);
+    const changes = Backend.getChanges(state, oldDeps);
 
     if (changes.length !== 1) {
       throw new RangeError(
@@ -243,6 +251,47 @@ export class CambriaState {
        */
   }
 
+  applyOps(instance: Instance, ops: Op[]): Instance {
+    // construct a change out of the ops
+    const change = {
+      ops,
+      message: "",
+      actor: CAMBRIA_MAGIC_ACTOR,
+      seq: instance.clock[CAMBRIA_MAGIC_ACTOR] + 1,
+      time: 0,
+      startOp: instance.maxOp + 1,
+      deps: instance.deps,
+    };
+
+    const [newInstance, _] = this.applyChangesToInstance(instance, [change]);
+    return newInstance;
+  }
+
+  // write a change to the instance,
+  // and update all the metadata we're keeping track of in the Instance
+  // only apply changes through this function!!
+  applyChangesToInstance(
+    instance: Instance,
+    changes: Change[]
+  ): [Instance, AutomergePatch] {
+    const [backendState, patch] = Backend.applyChanges(
+      instance.state,
+      changes.map(encodeChange)
+    );
+
+    return [
+      {
+        clock: patch.clock,
+        schema: instance.schema,
+        deps: patch.deps,
+        // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
+        maxOp: backendState.state.getIn(["opSet", "maxOp"], 0),
+        state: backendState,
+      },
+      patch,
+    ];
+  }
+
   applySchemaChanges(
     blocks: CambriaBlock[],
     schemas: string[]
@@ -271,14 +320,12 @@ export class CambriaState {
       instance.bootstraped = true;
     }
 
-    const [newDoc, patch] = Backend.applyChanges(
-      instance.doc,
-      changesToApply.map(encodeChange)
+    const [newInstance, patch] = this.applyChangesToInstance(
+      instance,
+      changesToApply
     );
-    instance.doc = newDoc;
-    instance.deps = patch.deps;
 
-    // instance.startOp = ...
+    this.instances[this.schema] = newInstance;
 
     return patch;
   }
@@ -418,14 +465,14 @@ export class CambriaState {
 
   private getInstance(schema: string): Backend.BackendState {
     if (!this.instances[schema]) {
-      const doc = new Backend.init();
+      const state = new Backend.init();
       const instance = {
-        doc,
-        seq: 1,
+        state,
         deps: [],
-        startOp: 1,
+        maxOp: 0,
         schema,
         bootstraped: false,
+        clock: {},
       };
       //this.bootstrap(instance, schema);
       this.instances[schema] = instance;

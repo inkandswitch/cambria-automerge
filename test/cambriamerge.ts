@@ -148,7 +148,7 @@ describe("Has basic schema tools", () => {
     });
   });
 
-  it("when missing a lens, it uses lenses loaded in at init", () => {
+  it("converts a patch from v1 to v2", () => {
     const doc1 = Backend.init({ schema: "projectv2", lenses: AllLenses });
 
     const [doc2, patch2] = Backend.applyChanges(doc1, [V1Lens, V1FirstWrite]);
