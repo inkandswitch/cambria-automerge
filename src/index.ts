@@ -1,6 +1,6 @@
 import { Graph, alg } from "graphlib";
 import * as Backend from "automerge/backend";
-import { Op, Clock, Change } from "automerge";
+import { Op, Clock, Change, Patch as AutomergePatch } from "automerge";
 import { encodeChange, decodeChange } from "automerge";
 import { JSONSchema7 } from "json-schema";
 import {
@@ -82,7 +82,7 @@ export function registerLens(
 export function applyChanges(
   doc: CambriaState,
   changes: CambriaBlock[]
-): [CambriaState, Backend.Patch] {
+): [CambriaState, AutomergePatch] {
   const patch = doc.applyChanges(changes);
   return [doc, patch];
 }
@@ -90,7 +90,7 @@ export function applyChanges(
 export function applyLocalChange(
   doc: CambriaState,
   request: Backend.Request
-): [CambriaState, Patch] {
+): [CambriaState, AutomergePatch] {
   let patch = doc.applyLocalChange(request);
   return [doc, patch];
 }
@@ -134,7 +134,7 @@ export class CambriaState {
     this.graph.setNode("mu", true);
   }
 
-  applyLocalChange(request: Backend.Request): Backend.Patch {
+  applyLocalChange(request: Backend.Request): AutomergePatch {
     const instance = this.instances[this.schema];
 
     if (instance === undefined) {
@@ -206,7 +206,7 @@ export class CambriaState {
   // take a change and apply it everywhere except one place
   // take all changes and apply them in one place
 
-  applyChanges(blocks: CambriaBlock[]): Backend.Patch {
+  applyChanges(blocks: CambriaBlock[]): AutomergePatch {
     this.history.push(...blocks);
     return this.applySchemaChanges(blocks, this.schemas);
   }
@@ -222,7 +222,10 @@ export class CambriaState {
       .sort((a, b) => (a === schema ? 1 : -1));
   }
 
-  applySchemaChanges(blocks: CambriaBlock[], schemas: string[]): Backend.Patch {
+  applySchemaChanges(
+    blocks: CambriaBlock[],
+    schemas: string[]
+  ): AutomergePatch {
     const instanceCache = {};
     const opCache = {};
     const changeCache = {};
@@ -256,6 +259,7 @@ export class CambriaState {
             deps,
             seq: to.seq,
             startOp: to.startOp,
+            time: 0,
             ops: convertedOps,
           };
           opCache[schema].push(...convertedOps);
@@ -276,13 +280,14 @@ export class CambriaState {
         const ops = opCache[schema];
         const deps = instance.deps;
         instance.seq += 1;
-        const change = {
+        const change: Change = {
           actor: block.change.actor,
           message: block.change.message,
           deps,
           seq: instance.seq,
           startOp: instance.startOp,
           ops,
+          time: 0,
         };
         const binChange = encodeChange(change);
         changeCache[schema].push(binChange);
