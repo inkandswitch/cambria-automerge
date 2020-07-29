@@ -212,6 +212,8 @@ export class CambriaState {
     const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
     const convertedOps = patchToOps(convertedPatch, change, index, to);
 
+    console.log({ op, patch, convertedPatch, convertedOps });
+
     return convertedOps;
   }
 
@@ -234,8 +236,10 @@ export class CambriaState {
       );
 
     const blocksToApply = this.history.slice(0, blockIndex);
-    const instance = this.initInstance(schema);
-    this.applySchemaChanges(blocksToApply, instance, graph);
+
+    // todo: make sure we set default values even if lens not in doc
+    const empty = this.initInstance(schema);
+    const [instance, _] = this.applySchemaChanges(blocksToApply, empty, graph);
     return instance;
   }
 
@@ -423,7 +427,9 @@ function patchToOps(
       let key = path_parts.pop();
       let obj_path = path_parts.join("/");
 
-      const obj = pathCache[obj_path];
+      const obj = getObjId(instance.state, obj_path) || pathCache[obj_path];
+      if (obj === undefined)
+        throw new Error(`Could not find object with path ${obj_path}`);
 
       if (action === "link") {
         const op = { action, obj, key, value: makeObj };
@@ -507,8 +513,30 @@ export function buildPath(op: Op, instance: Instance): string {
   let obj = op.obj;
   let path: string[] = getPath(instance.state, obj) || [];
   console.log(deepInspect({ path }));
-  const finalPath = "/" + path.join("/") + op.key;
+  const finalPath = "/" + [...path, op.key].join("/");
   return finalPath;
+}
+
+// Given a json path in a json doc, return the object ID at that path
+function getObjId(state: any, path: string): string {
+  const pathSegments = path.split("/").slice(-1);
+  console.log({ pathSegments });
+  const opSet = state.get("opSet");
+  console.log(
+    "object ids",
+    deepInspect(opSet.getIn(["byObject", ROOT_ID]).toJS())
+  );
+
+  let objectId = ROOT_ID;
+
+  for (const pathSegment of pathSegments) {
+    console.log({ pathSegment, objectId });
+    const objectKeys = opSet.getIn(["byObject", objectId]);
+    // todo: don't just take the first one here -- pick the right one
+    objectId = objectKeys._keys[pathSegment][0].value;
+  }
+
+  return objectId;
 }
 
 function getPath(state: any, obj: string): string[] | null {
@@ -534,11 +562,6 @@ function getPath(state: any, obj: string): string[] | null {
 }
 
 export function opToPatch(op: Op, instance: Instance): CloudinaPatch {
-  if (op.obj) {
-    console.log(
-      deepInspect({ op: op.obj, path: getPath(instance.state, op.obj) })
-    );
-  }
   switch (op.action) {
     case "set": {
       const path = buildPath(op, instance);

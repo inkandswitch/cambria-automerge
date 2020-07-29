@@ -398,15 +398,13 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    it("can convert a rename inside an object", () => {
+    it.only("can convert a rename inside an object", () => {
       const doc1 = Cambria.init({
         schema: "projectv2",
         lenses: [V1Lens, V2Lens],
       });
 
       const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
-
-      console.log(deepInspect({ patch2 }));
 
       const [doc3, patch3] = Cambria.applyChanges(doc2, [
         {
