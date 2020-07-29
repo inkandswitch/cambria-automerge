@@ -177,7 +177,7 @@ export class CambriaState {
 
   applyChanges(blocks: CambriaBlock[]): AutomergePatch {
     this.history.push(...blocks);
-    const instance = this.getInstance[this.schema];
+    const instance: Instance = this.getInstance(this.schema);
     const [newInstance, patch] = this.applySchemaChanges(
       blocks,
       instance,
@@ -310,9 +310,9 @@ export class CambriaState {
     if (!instance.bootstrapped) {
       const bootstrapChange = this.bootstrap(instance);
 
-      console.log(
-        deepInspect({ schema: instance.schema, change: bootstrapChange })
-      );
+      // console.log(
+      //   deepInspect({ schema: instance.schema, change: bootstrapChange })
+      // );
 
       changesToApply.unshift(bootstrapChange);
       instance.bootstrapped = true;
