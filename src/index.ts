@@ -110,7 +110,7 @@ export function getChanges(doc: CambriaState, haveDeps: Clock): CambriaBlock[] {
 export class CambriaState {
   schema: string;
   history: CambriaBlock[];
-  cloudinaState : CloudinaState;
+  cloudinaState: CloudinaState;
   private instances: { [schema: string]: Instance };
 
   constructor(opts: InitOptions) {
@@ -119,13 +119,13 @@ export class CambriaState {
     this.instances = {};
 
     this.cloudinaState = {
-       jsonschema7: { mu: emptySchema },
-       graph: new Graph()
-    }
+      jsonschema7: { mu: emptySchema },
+      graph: new Graph(),
+    };
     this.cloudinaState.graph.setNode("mu", true);
 
     for (let lens of opts.lenses || []) {
-      addLens(this.cloudinaState,lens);
+      addLens(this.cloudinaState, lens);
     }
   }
 
@@ -177,10 +177,14 @@ export class CambriaState {
 
   applyChanges(blocks: CambriaBlock[]): AutomergePatch {
     this.history.push(...blocks);
-    const instance = this.getInstance[this.schema]
-    const [ newInstance, patch ] =  this.applySchemaChanges(blocks, instance, this.cloudinaState)
-    this.instances[this.schema] = newInstance
-    return patch
+    const instance = this.getInstance[this.schema];
+    const [newInstance, patch] = this.applySchemaChanges(
+      blocks,
+      instance,
+      this.cloudinaState
+    );
+    this.instances[this.schema] = newInstance;
+    return patch;
   }
 
   getChanges(haveDeps: Clock): CambriaBlock[] {
@@ -194,10 +198,16 @@ export class CambriaState {
       .sort((a, b) => (a === schema ? 1 : -1));
   }
 
-  convertOp(change: Change, index: number, from: Instance, to: Instance, graph: CloudinaGraph): Op[] {
+  convertOp(
+    change: Change,
+    index: number,
+    from: Instance,
+    to: Instance,
+    state: CloudinaState
+  ): Op[] {
     const op = change.ops[index];
-    const lensStack = lensesFromTo(graph, from.schema, to.schema);
-    const jsonschema7 = graph.jsonschema7[from.schema];
+    const lensStack = lensesFromTo(state, from.schema, to.schema);
+    const jsonschema7 = state.jsonschema7[from.schema];
     const patch = opToPatch(op, from);
     const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
     const convertedOps = patchToOps(convertedPatch, change, index, to);
@@ -205,21 +215,46 @@ export class CambriaState {
     return convertedOps;
   }
 
-  getInstanceAt(schema: string, when: Clock, graph: CloudinaState) {
-    const index = this.history.find( block => clockEquals(block.change.clock, when))
+  getInstanceAt(
+    schema: string,
+    actorId: string,
+    seq: number,
+    graph: CloudinaState
+  ): Instance {
+    const blockIndex = this.history.findIndex(
+      (block) =>
+        block.kind === "change" &&
+        block.change.actor === actorId &&
+        block.change.seq == seq
+    );
 
-    const blocksToApply = this.history.slice(instance.historyCounter,index)
-    this.applySchemaChanges(blocksToApply, schema, graph)
-    instance.historyCounter = index
+    if (blockIndex === -1)
+      throw new Error(
+        `Could not find block with actorId ${actorId} and seq ${seq}`
+      );
+
+    const blocksToApply = this.history.slice(0, blockIndex);
+    const instance = this.initInstance(schema);
+    this.applySchemaChanges(blocksToApply, instance, graph);
+    return instance;
   }
 
-  convertChange(block: AutomergeChange, target: Instance, graph: CloudinaState): Change {
-    const lensStack = lensesFromTo(graph, block.schema, target.schema);
+  convertChange(
+    block: AutomergeChange,
+    target: Instance,
+    state: CloudinaState
+  ): Change {
+    const lensStack = lensesFromTo(state, block.schema, target.schema);
 
     const ops: Op[] = [];
 
-    let from_instance = this.getInstanceAt(block.schema, block.change.clock, graph);
-    let to_instance = { ... target }
+    let from_instance = this.getInstanceAt(
+      block.schema,
+      block.change.actor,
+      block.change.seq,
+      state
+    );
+    let to_instance = { ...target };
 
     for (let i = 0; i < block.change.ops.length; i++) {
       const op = block.change.ops[i];
@@ -228,7 +263,8 @@ export class CambriaState {
         block.change,
         i,
         from_instance,
-        to_instance
+        to_instance,
+        state
       );
       ops.push(...convertedOps);
       from_instance = applyOps(from_instance, [op]);
@@ -253,20 +289,20 @@ export class CambriaState {
   applySchemaChanges(
     blocks: CambriaBlock[],
     instance: Instance,
-    graph: CloudinaState
-  ): AutomergePatch {
+    state: CloudinaState
+  ): [Instance, AutomergePatch] {
     const changesToApply: Change[] = [];
 
     for (let block of blocks) {
       if (block.kind === "lens") {
-        addLens(graph,block);
+        addLens(state, block);
         continue;
       }
 
       if (block.schema === instance.schema) {
         changesToApply.push(block.change);
       } else {
-        const newChange = this.convertChange(block, instance.schema);
+        const newChange = this.convertChange(block, instance, state);
         changesToApply.push(newChange);
       }
     }
@@ -274,7 +310,9 @@ export class CambriaState {
     if (!instance.bootstrapped) {
       const bootstrapChange = this.bootstrap(instance);
 
-      console.log(deepInspect({ schema: instance.schema, change: bootstrapChange }))
+      console.log(
+        deepInspect({ schema: instance.schema, change: bootstrapChange })
+      );
 
       changesToApply.unshift(bootstrapChange);
       instance.bootstrapped = true;
@@ -285,27 +323,32 @@ export class CambriaState {
       changesToApply
     );
 
-    return [ patch, newInstance ];
+    return [newInstance, patch];
   }
 
   private getInstance(schema: string): Instance {
     if (!this.instances[schema]) {
-      const state = Backend.init();
-      const instance = {
-        state,
-        deps: {},
-        schema,
-        bootstrapped: false,
-        clock: {},
-      };
-      this.instances[schema] = instance;
+      this.instances[schema] = this.initInstance(schema);
     }
     return this.instances[schema];
   }
 
+  private initInstance(schema): Instance {
+    const state = Backend.init();
+    return {
+      state,
+      deps: {},
+      schema,
+      bootstrapped: false,
+      clock: {},
+    };
+  }
+
   private bootstrap(instance: Instance): Change {
     const urOp = [{ op: "add" as const, path: "", value: {} }];
-    const jsonschema7: JSONSchema7 = this.cloudinaState.jsonschema7[instance.schema];
+    const jsonschema7: JSONSchema7 = this.cloudinaState.jsonschema7[
+      instance.schema
+    ];
     if (jsonschema7 === undefined) {
       throw new Error(
         `Could not find JSON schema for schema ${instance.schema}`
@@ -334,7 +377,6 @@ export class CambriaState {
   get schemas(): string[] {
     return this.cloudinaState.graph.nodes();
   }
-
 }
 
 function patchToOps(
@@ -463,35 +505,39 @@ export function buildPath(op: Op, instance: Instance): string {
   const backendState: any = instance.state;
   const opSet = backendState.state;
   let obj = op.obj;
-  let path : string[] = getPath(instance.state, obj) || []
-  console.log(deepInspect({ path }))
+  let path: string[] = getPath(instance.state, obj) || [];
+  console.log(deepInspect({ path }));
   const finalPath = "/" + path.join("/") + op.key;
   return finalPath;
 }
 
-function getPath(state: any, obj: string) : (string[] | null) {
-  const opSet = state.get('opSet')
-  let path : string[] = []
+function getPath(state: any, obj: string): string[] | null {
+  const opSet = state.get("opSet");
+  let path: string[] = [];
   while (obj !== ROOT_ID) {
-    const ref = opSet.getIn(['byObject', obj, '_inbound'], Set()).first()
-    if (!ref) return null
-    obj = ref.get('obj')
-    const objType = opSet.getIn(['byObject', obj, '_init', 'action'])
+    const ref = opSet.getIn(["byObject", obj, "_inbound"], Set()).first();
+    if (!ref) return null;
+    obj = ref.get("obj");
+    const objType = opSet.getIn(["byObject", obj, "_init", "action"]);
 
-    if (objType === 'makeList' || objType === 'makeText') {
-      const index = opSet.getIn(['byObject', obj, '_elemIds']).indexOf(ref.get('key'))
-      if (index < 0) return null
-      path.unshift(index)
+    if (objType === "makeList" || objType === "makeText") {
+      const index = opSet
+        .getIn(["byObject", obj, "_elemIds"])
+        .indexOf(ref.get("key"));
+      if (index < 0) return null;
+      path.unshift(index);
     } else {
-      path.unshift(ref.get('key'))
+      path.unshift(ref.get("key"));
     }
   }
-  return path
+  return path;
 }
 
 export function opToPatch(op: Op, instance: Instance): CloudinaPatch {
   if (op.obj) {
-    console.log(deepInspect({ op: op.obj, path: getPath(instance.state, op.obj)}))
+    console.log(
+      deepInspect({ op: op.obj, path: getPath(instance.state, op.obj) })
+    );
   }
   switch (op.action) {
     case "set": {
@@ -526,50 +572,50 @@ function calcDeps(change: Change, deps: Clock): Clock {
   return newDeps;
 }
 
-function lessOrEqual(clock1, clock2) : boolean {
-  return Object.keys(clock1).concat(Object.keys(clock2)).reduce(
-    (result, key) => (result && (clock1[key] || 0) <= (clock2[key] || 0)),
-    true)
-}
+// function lessOrEqual(clock1, clock2): boolean {
+//   return Object.keys(clock1)
+//     .concat(Object.keys(clock2))
+//     .reduce(
+//       (result, key) => result && (clock1[key] || 0) <= (clock2[key] || 0),
+//       true
+//     );
+// }
 
-function clockEquals(clock1, clock2) : boolean {
-  return lessOrEqual(clock1, clock2) && lessOrEqual(clock2, clock1)
-}
+// function clockEquals(clock1, clock2): boolean {
+//   return lessOrEqual(clock1, clock2) && lessOrEqual(clock2, clock1);
+// }
 
 function applyChangesToInstance(
-    instance: Instance,
-    changes: Change[]
-  ): [Instance, AutomergePatch] {
+  instance: Instance,
+  changes: Change[]
+): [Instance, AutomergePatch] {
+  const [backendState, patch] = Backend.applyChanges(instance.state, changes);
 
-    const [backendState, patch] = Backend.applyChanges(instance.state, changes);
-
-    return [
-      {
-        clock: patch.clock || {},
-        schema: instance.schema,
-        bootstrapped: instance.bootstrapped,
-        deps: patch.deps || {},
-        state: backendState,
-      },
-      patch,
-    ];
+  return [
+    {
+      clock: patch.clock || {},
+      schema: instance.schema,
+      bootstrapped: instance.bootstrapped,
+      deps: patch.deps || {},
+      state: backendState,
+    },
+    patch,
+  ];
 }
 
-
 function applyOps(instance: Instance, ops: Op[]): Instance {
-    // construct a change out of the ops
-    const change = {
-      ops,
-      message: "",
-      actor: CAMBRIA_MAGIC_ACTOR,
-      seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0) + 1,
-      deps: instance.deps,
-    };
+  // construct a change out of the ops
+  const change = {
+    ops,
+    message: "",
+    actor: CAMBRIA_MAGIC_ACTOR,
+    seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0) + 1,
+    deps: instance.deps,
+  };
 
-    const [newInstance, _] = applyChangesToInstance(instance, [change]);
-    return newInstance;
-  }
-
+  const [newInstance, _] = applyChangesToInstance(instance, [change]);
+  return newInstance;
+}
 
 function addLens(state: CloudinaState, block: RegisteredLens) {
   const from = block.from;
@@ -596,7 +642,11 @@ function addLens(state: CloudinaState, block: RegisteredLens) {
   state.jsonschema7[to] = updateSchema(state.jsonschema7[from], lens);
 }
 
-export function lensesFromTo(cloudinaState: CloudinaState, from: string, to: string): LensSource {
+export function lensesFromTo(
+  cloudinaState: CloudinaState,
+  from: string,
+  to: string
+): LensSource {
   const migrationPaths = alg.dijkstra(cloudinaState.graph, to);
   const lenses: LensOp[] = [];
   if (migrationPaths[from].distance == Infinity) {
