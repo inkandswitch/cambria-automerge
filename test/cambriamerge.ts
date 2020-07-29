@@ -37,17 +37,13 @@ const V1FirstWrite = {
     message: "",
     actor: ACTOR_ID_1,
     seq: 1,
-    deps: ["f758ca33017e3dc867dc10a8090ce0ff55ec461af8d9f45544a167d1ed74a3bf"],
-    time: 0,
-    startOp: 3, // applyLocalChange actually computes this for us
+    deps: { "0000000000": 1 },
     ops: [
       {
         action: "set" as const,
         obj: AUTOMERGE_ROOT_ID,
         key: "title",
-        insert: false,
         value: "hello",
-        pred: ["1@0000000000"],
       },
     ],
   },
@@ -101,22 +97,24 @@ describe("Has basic schema tools", () => {
       },
     ]);
 
-    assert.deepEqual(patch2.diffs, {
-      objectId: AUTOMERGE_ROOT_ID,
-      type: "map",
-      props: {
-        summary: {
-          "2@0000000000": {
-            value: "",
-          },
-        },
-        title: {
-          "1@0000000000": {
-            value: "",
-          },
-        },
+    assert.deepEqual(patch2.diffs, [
+      {
+        action: 'set',
+        key: 'title',
+        obj: '00000000-0000-0000-0000-000000000000',
+        path: [],
+        type: 'map',
+        value: ''
       },
-    });
+      {
+        action: 'set',
+        key: 'summary',
+        obj: '00000000-0000-0000-0000-000000000000',
+        path: [],
+        type: 'map',
+        value: ''
+      }
+    ])
   });
 
   it("can accept a real change", () => {
@@ -126,11 +124,16 @@ describe("Has basic schema tools", () => {
 
     const [doc3, patch3] = Backend.applyChanges(doc2, [V1FirstWrite]);
 
-    assert.deepEqual(patch3.diffs, {
-      objectId: "00000000-0000-0000-0000-000000000000",
-      props: { title: { "3@111111": { value: "hello" } } },
-      type: "map",
-    });
+    assert.deepEqual(patch3.diffs, [
+      {
+        action: 'set',
+        key: 'title',
+        obj: '00000000-0000-0000-0000-000000000000',
+        path: [],
+        type: 'map',
+        value: 'hello'
+      }
+    ])
   });
 
   it("can accept a real change with its lens", () => {
@@ -138,29 +141,65 @@ describe("Has basic schema tools", () => {
 
     const [doc2, patch2] = Backend.applyChanges(doc1, [V1Lens, V1FirstWrite]);
 
-    assert.deepEqual(patch2.diffs, {
-      objectId: "00000000-0000-0000-0000-000000000000",
-      props: {
-        title: { "3@111111": { value: "hello" } },
-        summary: { "2@0000000000": { value: "" } },
+    assert.deepEqual(patch2.diffs, [
+      {
+        action: 'set',
+        key: 'title',
+        obj: '00000000-0000-0000-0000-000000000000',
+        path: [],
+        type: 'map',
+        value: ''
       },
-      type: "map",
-    });
+      {
+        action: 'set',
+        key: 'summary',
+        obj: '00000000-0000-0000-0000-000000000000',
+        path: [],
+        type: 'map',
+        value: ''
+      },
+      {
+        action: 'set',
+        key: 'title',
+        obj: '00000000-0000-0000-0000-000000000000',
+        path: [],
+        type: 'map',
+        value: 'hello'
+      }
+    ])
   });
 
-  it.only("converts a patch from v1 to v2", () => {
+  it("converts a patch from v1 to v2", () => {
     const doc1 = Backend.init({ schema: "projectv2", lenses: AllLenses });
 
     const [doc2, patch2] = Backend.applyChanges(doc1, [V1Lens, V1FirstWrite]);
 
-    assert.deepEqual(patch2.diffs, {
-      objectId: "00000000-0000-0000-0000-000000000000",
-      props: {
-        name: { "3@111111": { value: "hello" } },
-        summary: { "2@0000000000": { value: "" } },
+    assert.deepEqual(patch2.diffs, [
+      {
+        "action": "set",
+        "key": "name",
+        "obj": "00000000-0000-0000-0000-000000000000",
+        "path": [],
+        "type": "map",
+        "value": ""
       },
-      type: "map",
-    });
+      {
+        "action": "set",
+        "key": "summary",
+        "obj": "00000000-0000-0000-0000-000000000000",
+        "path": [],
+        "type": "map",
+        "value": ""
+      },
+      {
+        "action": "set",
+        "key": "name",
+        "obj": "00000000-0000-0000-0000-000000000000",
+        "path": [],
+        "type": "map",
+        "value": "hello"
+      }
+    ]);
   });
 });
 

@@ -8,8 +8,8 @@
     "build": "webpack"
   },
   "dependencies": {
-    "automerge": "github:orionz/automerge#performance-dist",
-    "cloudina": "ssh://git@github.com:inkandswitch/cloudina.git#add-default-values",
+    "automerge": "0.14.1",
+    "cloudina": "ssh://git@github.com:inkandswitch/cloudina.git",
     "graphlib": "^2.1.8"
   },
   "devDependencies": {

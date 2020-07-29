@@ -4,15 +4,15 @@ import { Set } from "immutable";
 
 // This import doesn't pull in types for the Backend functions,
 // maybe because we're importing from a non-root file?
-import * as Backend from "automerge/backend";
 import {
+  Backend,
   Op,
   Clock,
   Change,
   Patch as AutomergePatch,
   BackendState,
 } from "automerge";
-import { encodeChange, decodeChange } from "automerge";
+
 import { JSONSchema7 } from "json-schema";
 import {
   Patch as CloudinaPatch,
@@ -43,14 +43,12 @@ const emptySchema = {
   additionalProperties: false,
 };
 
-type Hash = string;
-
 export interface Instance {
   clock: Clock;
   schema: string;
-  deps: Hash[];
+  deps: Clock;
+  bootstrapped: boolean;
   // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
-  maxOp: number;
   state: BackendState;
 }
 
@@ -91,7 +89,7 @@ export function applyChanges(
 
 export function applyLocalChange(
   doc: CambriaState,
-  request: Backend.Request
+  request: Change
 ): [CambriaState, AutomergePatch] {
   let patch = doc.applyLocalChange(request);
   return [doc, patch];
@@ -99,26 +97,15 @@ export function applyLocalChange(
 
 export function getChanges(
   doc: CambriaState,
-  haveDeps: Hash[]
+  haveDeps: Clock
 ): CambriaBlock[] {
   return doc.getChanges(haveDeps);
 }
 
-/*
-export function encodeChange(change: automerge.Change): Change {
-}
-
-export function decodeChange(binaryChange: Change): automerge.Change {
-}
-*/
 
 export class CambriaState {
   schema: string;
-  //deps: Hash[]
-  //clock: Clock
   history: CambriaBlock[];
-  //seq: number
-  //maxOp: number
   private instances: { [schema: string]: Instance };
   private graph: Graph;
   private jsonschema7: { [schema: string]: JSONSchema7 };
@@ -127,10 +114,6 @@ export class CambriaState {
     this.schema = opts.schema || "mu";
     this.history = [];
     this.instances = {};
-    //this.seq = 0
-    //this.maxOp = 0
-    //this.deps = []
-    //this.clock = {}
     this.graph = new Graph();
     this.jsonschema7 = { mu: emptySchema };
     this.graph.setNode("mu", true);
@@ -140,7 +123,7 @@ export class CambriaState {
     }
   }
 
-  applyLocalChange(request: Backend.Request): AutomergePatch {
+  applyLocalChange(request: Change): AutomergePatch {
     const instance = this.instances[this.schema];
 
     if (instance === undefined) {
@@ -161,7 +144,7 @@ export class CambriaState {
       );
     }
 
-    const change: Change = decodeChange(changes[0]);
+    const change: Change = changes[0];
     const block: AutomergeChange = {
       kind: "change",
       schema: this.schema,
@@ -213,7 +196,7 @@ export class CambriaState {
     return this.applySchemaChanges(blocks, this.schemas);
   }
 
-  getChanges(haveDeps: Hash[]): CambriaBlock[] {
+  getChanges(haveDeps: Clock): CambriaBlock[] {
     // FIXME - todo
     return [];
   }
@@ -270,9 +253,7 @@ export class CambriaState {
       message: block.change.message,
       actor: block.change.actor,
       seq: block.change.seq,
-      time: block.change.time,
-      startOp: 3, // FIXME
-      deps: ["aaaaaa"], // FIXME
+      deps: {}
     };
 
     return change;
@@ -284,9 +265,7 @@ export class CambriaState {
       ops,
       message: "",
       actor: CAMBRIA_MAGIC_ACTOR,
-      seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0) + 1,
-      time: 0,
-      startOp: instance.maxOp + 1,
+      seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0)+ 1,
       deps: instance.deps,
     };
 
@@ -308,16 +287,16 @@ export class CambriaState {
 
     const [backendState, patch] = Backend.applyChanges(
       instance.state,
-      changes.map(encodeChange)
+      changes
     );
 
     return [
       {
-        clock: patch.clock,
+        clock: patch.clock || {},
         schema: instance.schema,
-        deps: patch.deps,
+        bootstrapped: instance.bootstrapped,
+        deps: patch.deps || {},
         // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
-        maxOp: backendState.state.getIn(["opSet", "maxOp"], 0),
         state: backendState,
       },
       patch,
@@ -346,10 +325,10 @@ export class CambriaState {
 
     const instance = this.getInstance(this.schema);
 
-    if (!instance.bootstraped) {
+    if (!instance.bootstrapped) {
       const bootstrapChange = this.bootstrap(this.schema);
       changesToApply.unshift(bootstrapChange);
-      instance.bootstraped = true;
+      instance.bootstrapped = true;
     }
 
     const [newInstance, patch] = this.applyChangesToInstance(
@@ -462,7 +441,6 @@ export class CambriaState {
   applyChange2(change: Change) {
     this.history.push(change)
     //this.clock[change.actor] = change.seq
-    //this.maxOp = Math.max(this.maxOp, change.startOp + change.ops.length - 1)
     //this.deps = calcDeps(change, this.deps)
 
     for (const index in change.ops) {
@@ -490,20 +468,19 @@ export class CambriaState {
   }
 */
 
-  private cloneInstance(schema: string): Backend.BackendState {
-    const instance = this.getInstance(schema);
-    return { ...instance, state: Backend.clone(instance.state) };
+  private cloneInstance(schema: string): Instance {
+    const instance = this.getInstance(schema)
+    return { ... instance }
   }
 
-  private getInstance(schema: string): Backend.BackendState {
+  private getInstance(schema: string): Instance {
     if (!this.instances[schema]) {
-      const state = new Backend.init();
+      const state = Backend.init();
       const instance = {
         state,
-        deps: [],
-        maxOp: 0,
+        deps: {},
         schema,
-        bootstraped: false,
+        bootstrapped: false,
         clock: {},
       };
       //this.bootstrap(instance, schema);
@@ -546,7 +523,7 @@ export class CambriaState {
   }
 }
 
-function patchToOps(patch: CloudinaPatch, instance: Instance): Backend.Change {
+function patchToOps(patch: CloudinaPatch, instance: Instance): Op[] {
   const opCache = {};
   const ops = patch.map((patchop, i) => {
     let action;
@@ -588,19 +565,16 @@ function patchToOps(patch: CloudinaPatch, instance: Instance): Backend.Change {
     const insert = false; // FIXME
 
     if (patchop.op === "add" || patchop.op === "replace") {
-      return { action, obj, key, insert, value: patchop.value, pred: [] };
+      return { action, obj, key, value: patchop.value  };
     } else {
-      return { action, obj, key, insert, pred: [] };
+      return { action, obj, key };
     }
   });
 
   return ops;
 }
 
-function buildBootstrapChange(
-  actor: string,
-  patch: CloudinaPatch
-): Backend.Change {
+function buildBootstrapChange(actor: string, patch: CloudinaPatch): Change {
   const opCache = {};
   const pathToOpId = { [""]: ROOT_ID };
   const ops = patch.map((patchop, i) => {
@@ -669,17 +643,16 @@ function buildBootstrapChange(
   const change = {
     actor,
     message: "",
-    deps: [],
+    deps: {},
     seq: 1,
-    startOp: 1,
-    time: 0,
     ops,
   };
   return change;
 }
 
+/*
 function applyPatch(
-  instance: Backend.BackendState,
+  instance: Instance,
   patch: CloudinaPatch,
   incomingOpId: string
 ): Op[] {
@@ -723,6 +696,7 @@ function applyPatch(
     }
   });
 }
+*/
 
 function parseOpId(opid: string): { counter: number; actor: string } {
   const regex = /^([0-9.]+)@(.*)$/;
@@ -755,7 +729,13 @@ export function opToPatch(op: Op, instance: Instance): CloudinaPatch {
     case "set": {
       const path = buildPath(op, instance);
       const { value } = op;
-      const action = op.insert ? "add" : "replace";
+      const action = "replace"
+      return [{ op: action, path, value }];
+    }
+    case "ins": {
+      const path = buildPath(op, instance);
+      const { value } = op;
+      const action = "add"
       return [{ op: action, path, value }];
     }
     case "del": {
