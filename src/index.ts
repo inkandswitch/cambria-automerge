@@ -48,7 +48,7 @@ type Hash = string;
 export interface Instance {
   clock: Clock;
   schema: string;
-  deps: Hash[];
+  // deps: Hash[];
   // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
   maxOp: number;
   state: BackendState;
@@ -89,13 +89,13 @@ export function applyChanges(
   return [doc, patch];
 }
 
-export function applyLocalChange(
-  doc: CambriaState,
-  request: Backend.Request
-): [CambriaState, AutomergePatch] {
-  let patch = doc.applyLocalChange(request);
-  return [doc, patch];
-}
+// export function applyLocalChange(
+//   doc: CambriaState,
+//   request: Backend.Request
+// ): [CambriaState, AutomergePatch] {
+//   let patch = doc.applyLocalChange(request);
+//   return [doc, patch];
+// }
 
 export function getChanges(
   doc: CambriaState,
@@ -140,40 +140,40 @@ export class CambriaState {
     }
   }
 
-  applyLocalChange(request: Backend.Request): AutomergePatch {
-    const instance = this.instances[this.schema];
+  // applyLocalChange(request: Backend.Request): AutomergePatch {
+  //   const instance = this.instances[this.schema];
 
-    if (instance === undefined) {
-      throw new RangeError(
-        `cant apply change - no instance for '${this.schema}'`
-      );
-    }
+  //   if (instance === undefined) {
+  //     throw new RangeError(
+  //       `cant apply change - no instance for '${this.schema}'`
+  //     );
+  //   }
 
-    const oldDeps = instance.deps;
+  //   const oldDeps = instance.deps;
 
-    const [state, patch] = Backend.applyLocalChange(instance.state, request);
+  //   const [state, patch] = Backend.applyLocalChange(instance.state, request);
 
-    const changes = Backend.getChanges(state, oldDeps);
+  //   const changes = Backend.getChanges(state, oldDeps);
 
-    if (changes.length !== 1) {
-      throw new RangeError(
-        `apply local changes produced invalid (${changes.length}) changes`
-      );
-    }
+  //   if (changes.length !== 1) {
+  //     throw new RangeError(
+  //       `apply local changes produced invalid (${changes.length}) changes`
+  //     );
+  //   }
 
-    const change: Change = decodeChange(changes[0]);
-    const block: AutomergeChange = {
-      kind: "change",
-      schema: this.schema,
-      change,
-      // FIXME hash // deps // actor
-    };
+  //   const change: Change = decodeChange(changes[0]);
+  //   const block: AutomergeChange = {
+  //     kind: "change",
+  //     schema: this.schema,
+  //     change,
+  //     // FIXME hash // deps // actor
+  //   };
 
-    this.history.push(block);
-    this.applySchemaChanges([block], this.schemas);
+  //   this.history.push(block);
+  //   this.applySchemaChanges([block], this.schemas);
 
-    return patch;
-  }
+  //   return patch;
+  // }
 
   reset() {
     this.instances = {};
@@ -229,9 +229,10 @@ export class CambriaState {
     const jsonschema7 = this.jsonschema7[from.schema];
     const patch = opToPatch(op, from);
     const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
-    const convertedOps = patchToOps(convertedPatch, to);
-
-    console.log("convertOp", { op, patch, convertedPatch, convertedOps });
+    const convertedOps = patchToOps(convertedPatch, to).map((o) => ({
+      ...o,
+      pred: op.pred, // TODO: for now, just take the pred of the original op
+    }));
 
     return convertedOps;
   }
@@ -247,8 +248,8 @@ export class CambriaState {
     for (let op of block.change.ops) {
       const convertedOps = this.convertOp(op, from_instance, to_instance);
       ops.push(...convertedOps);
-      from_instance = this.applyOps(from_instance, [op]);
-      to_instance = this.applyOps(to_instance, convertedOps);
+      from_instance = this.applyOps(from_instance, [op], block.change.deps);
+      to_instance = this.applyOps(to_instance, convertedOps, block.change.deps);
     }
 
     /*
@@ -272,22 +273,22 @@ export class CambriaState {
       seq: block.change.seq,
       time: block.change.time,
       startOp: 3, // FIXME
-      deps: ["aaaaaa"], // FIXME
+      deps: block.change.deps, // FIXME
     };
 
     return change;
   }
 
-  applyOps(instance: Instance, ops: Op[]): Instance {
+  applyOps(instance: Instance, ops: Op[], deps: Hash[]): Instance {
     // construct a change out of the ops
-    const change = {
+    const change: Change = {
       ops,
       message: "",
       actor: CAMBRIA_MAGIC_ACTOR,
       seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0) + 1,
       time: 0,
       startOp: instance.maxOp + 1,
-      deps: instance.deps,
+      deps,
     };
 
     const [newInstance, _] = this.applyChangesToInstance(instance, [change]);
@@ -306,6 +307,11 @@ export class CambriaState {
     //fillOutStartOps()
     //fillOutPred()
 
+    // super hack to see if a higher startop results in correct patch
+    if (changes[0].ops[0].key === "name") {
+      changes[0].startOp = 3;
+    }
+
     const [backendState, patch] = Backend.applyChanges(
       instance.state,
       changes.map(encodeChange)
@@ -315,7 +321,6 @@ export class CambriaState {
       {
         clock: patch.clock,
         schema: instance.schema,
-        deps: patch.deps,
         // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
         maxOp: backendState.state.getIn(["opSet", "maxOp"], 0),
         state: backendState,
@@ -546,9 +551,9 @@ export class CambriaState {
   }
 }
 
-function patchToOps(patch: CloudinaPatch, instance: Instance): Backend.Change {
+function patchToOps(patch: CloudinaPatch, instance: Instance): Op[] {
   const opCache = {};
-  const ops = patch.map((patchop, i) => {
+  const ops: Op[] = patch.map((patchop, i) => {
     let action;
     if (patchop.op === "remove") {
       action = "del";

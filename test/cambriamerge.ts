@@ -141,7 +141,7 @@ describe("Has basic schema tools", () => {
     assert.deepEqual(patch2.diffs, {
       objectId: "00000000-0000-0000-0000-000000000000",
       props: {
-        title: { "3@111111": { value: "hello" } },
+        title: { [`3@${ACTOR_ID_1}`]: { value: "hello" } },
         summary: { "2@0000000000": { value: "" } },
       },
       type: "map",
@@ -156,7 +156,7 @@ describe("Has basic schema tools", () => {
     assert.deepEqual(patch2.diffs, {
       objectId: "00000000-0000-0000-0000-000000000000",
       props: {
-        name: { "3@111111": { value: "hello" } },
+        name: { [`3@${ACTOR_ID_1}`]: { value: "hello" } },
         summary: { "2@0000000000": { value: "" } },
       },
       type: "map",
