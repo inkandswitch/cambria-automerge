@@ -2,9 +2,9 @@ import { Graph, alg } from "graphlib";
 
 import { Set } from "immutable";
 
-import { v5 } from "uuid"
+import { v5 } from "uuid";
 
-const MAGIC_UUID = 'f1bb7a0b-2d26-48ca-aaa3-92c63bbb5c50'
+const MAGIC_UUID = "f1bb7a0b-2d26-48ca-aaa3-92c63bbb5c50";
 
 // This import doesn't pull in types for the Backend functions,
 // maybe because we're importing from a non-root file?
@@ -207,7 +207,7 @@ export class CambriaState {
   }
 
   convertOp(change: Change, index: number, from: Instance, to: Instance): Op[] {
-    const op = change.ops[index]
+    const op = change.ops[index];
     const lensStack = this.lensesFromTo(from.schema, to.schema);
     const jsonschema7 = this.jsonschema7[from.schema];
     const patch = opToPatch(op, from);
@@ -225,9 +225,14 @@ export class CambriaState {
     let from_instance = this.cloneInstance(block.schema);
     let to_instance = this.cloneInstance(to);
 
-    for (let i = 0; i < block.change.ops.length ; i++) {
-      const op = block.change.ops[i]
-      const convertedOps = this.convertOp(block.change, i, from_instance, to_instance);
+    for (let i = 0; i < block.change.ops.length; i++) {
+      const op = block.change.ops[i];
+      const convertedOps = this.convertOp(
+        block.change,
+        i,
+        from_instance,
+        to_instance
+      );
       ops.push(...convertedOps);
       from_instance = this.applyOps(from_instance, [op]);
       to_instance = this.applyOps(to_instance, convertedOps);
@@ -322,7 +327,7 @@ export class CambriaState {
     const instance = this.getInstance(this.schema);
 
     if (!instance.bootstrapped) {
-      const bootstrapChange = this.bootstrap(instance)
+      const bootstrapChange = this.bootstrap(instance);
 
       changesToApply.unshift(bootstrapChange);
       instance.bootstrapped = true;
@@ -487,18 +492,28 @@ export class CambriaState {
 
   private bootstrap(instance: Instance): Change {
     const urOp = [{ op: "add" as const, path: "", value: {} }];
-    const jsonschema7 = this.jsonschema7[instance.schema];
+    const jsonschema7: JSONSchema7 = this.jsonschema7[instance.schema];
+    if (jsonschema7 === undefined) {
+      throw new Error(
+        `Could not find JSON schema for schema ${instance.schema}`
+      );
+    }
     const defaultsPatch = applyLensToPatch([], urOp, jsonschema7).slice(1);
 
-    const bootstrapChange : Change = {
+    const bootstrapChange: Change = {
       actor: CAMBRIA_MAGIC_ACTOR,
       message: "",
       deps: {},
       seq: 1,
       ops: [],
-    }
+    };
 
-    bootstrapChange.ops = patchToOps(defaultsPatch, bootstrapChange, 1, instance)
+    bootstrapChange.ops = patchToOps(
+      defaultsPatch,
+      bootstrapChange,
+      1,
+      instance
+    );
 
     return bootstrapChange;
   }
@@ -527,58 +542,68 @@ export class CambriaState {
   }
 }
 
-function patchToOps(patch: CloudinaPatch, origin: Change, opIndex: number, instance: Instance): Op[] {
+function patchToOps(
+  patch: CloudinaPatch,
+  origin: Change,
+  opIndex: number,
+  instance: Instance
+): Op[] {
   const opCache = {};
-  const pathCache = {[""]:ROOT_ID}
-  const ops = patch.map((patchop, i) => {
-    const acc : Op[] = []
-    let makeObj = v5(`${origin.actor}:${origin.seq}:${opIndex}:${i}"`, MAGIC_UUID)
-    let action;
-    if (patchop.op === "remove") {
-      action = "del";
-    } else if (patchop.op === "add" || patchop.op === "replace") {
-      if (
-        patchop.value === null ||
-        ["string", "number", "boolean"].includes(typeof patchop.value)
-      ) {
-        action = "set";
-      } else if (Array.isArray(patchop.value)) {
-        action = "makeList";
-      } else if (
-        typeof patchop.value === "object" &&
-        Object.keys(patchop.value).length === 0
-      ) {
-        action = "link";
-        acc.push({ action: "makeMap", obj: makeObj })
-        pathCache[patchop.path] = makeObj
+  const pathCache = { [""]: ROOT_ID };
+  const ops = patch
+    .map((patchop, i) => {
+      const acc: Op[] = [];
+      let makeObj = v5(
+        `${origin.actor}:${origin.seq}:${opIndex}:${i}"`,
+        MAGIC_UUID
+      );
+      let action;
+      if (patchop.op === "remove") {
+        action = "del";
+      } else if (patchop.op === "add" || patchop.op === "replace") {
+        if (
+          patchop.value === null ||
+          ["string", "number", "boolean"].includes(typeof patchop.value)
+        ) {
+          action = "set";
+        } else if (Array.isArray(patchop.value)) {
+          action = "makeList";
+        } else if (
+          typeof patchop.value === "object" &&
+          Object.keys(patchop.value).length === 0
+        ) {
+          action = "link";
+          acc.push({ action: "makeMap", obj: makeObj });
+          pathCache[patchop.path] = makeObj;
+        } else {
+          throw new RangeError(`bad value for patchop=${deepInspect(patchop)}`);
+        }
       } else {
-        throw new RangeError(`bad value for patchop=${deepInspect(patchop)}`);
+        throw new RangeError(`bad op type for patchop=${deepInspect(patchop)}`);
       }
-    } else {
-      throw new RangeError(`bad op type for patchop=${deepInspect(patchop)}`);
-    }
 
-    "/foo/bar/baz"
-    "/foo/bar"
+      "/foo/bar/baz";
+      "/foo/bar";
 
-    let path_parts = patchop.path.split("/");
-    let key = path_parts.pop()
-    let obj_path = path_parts.join("/")
+      let path_parts = patchop.path.split("/");
+      let key = path_parts.pop();
+      let obj_path = path_parts.join("/");
 
-    const obj = pathCache[obj_path]
+      const obj = pathCache[obj_path];
 
-    if (action === 'link') {
-      const op = { action, obj, key, value: makeObj }
-      acc.push(op)
-    } else if (patchop.op === "add" || patchop.op === "replace") {
-      const op = { action, obj, key, value: patchop.value };
-      acc.push(op)
-    } else {
-      const op = { action, obj, key };
-      acc.push(op)
-    }
-    return acc
-  }).flat();
+      if (action === "link") {
+        const op = { action, obj, key, value: makeObj };
+        acc.push(op);
+      } else if (patchop.op === "add" || patchop.op === "replace") {
+        const op = { action, obj, key, value: patchop.value };
+        acc.push(op);
+      } else {
+        const op = { action, obj, key };
+        acc.push(op);
+      }
+      return acc;
+    })
+    .flat();
 
   return ops;
 }

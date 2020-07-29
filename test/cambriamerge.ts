@@ -397,6 +397,47 @@ describe("Has basic schema tools", () => {
         },
       });
     });
+
+    it("can convert a rename inside an object", () => {
+      const doc1 = Cambria.init({
+        schema: "projectv2",
+        lenses: [V1Lens, V2Lens],
+      });
+
+      const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
+
+      const [doc3, patch3] = Cambria.applyChanges(doc1, [
+        {
+          kind: "change" as const,
+          schema: "projectv1",
+          change: {
+            message: "",
+            actor: ACTOR_ID_1,
+            seq: 1,
+            deps: { "0000000000": 1 },
+            ops: [
+              {
+                action: "set" as const,
+                obj: patch2.diffs[0].obj,
+                key: "title",
+                value: "hello",
+              },
+            ],
+          },
+        },
+      ]);
+
+      let doc = Frontend.init();
+      doc = Frontend.applyPatch(doc, patch2);
+      doc = Frontend.applyPatch(doc, patch3);
+
+      assert.deepEqual(doc, {
+        details: {
+          name: "hello",
+          summary: "",
+        },
+      });
+    });
   });
 
   // nested objects
