@@ -398,7 +398,7 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    it("can convert a rename inside an object", () => {
+    it.only("can convert a rename inside an object", () => {
       const doc1 = Cambria.init({
         schema: "projectv2",
         lenses: [V1Lens, V2Lens],
@@ -406,7 +406,9 @@ describe("Has basic schema tools", () => {
 
       const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
 
-      const [doc3, patch3] = Cambria.applyChanges(doc1, [
+      console.log(deepInspect({patch2}))
+
+      const [doc3, patch3] = Cambria.applyChanges(doc2, [
         {
           kind: "change" as const,
           schema: "projectv1",
@@ -451,16 +453,16 @@ describe("Has basic schema tools", () => {
 describe("lensFromTo", () => {
   it("correctly computes a lens path", () => {
     const doc1 = Cambria.init({ schema: "projectv2", lenses: AllLenses });
-    assert.deepEqual(doc1.lensesFromTo("mu", "projectv2"), [
+    assert.deepEqual(Cambria.lensesFromTo(doc1.cloudinaState, "mu", "projectv2"), [
       ...V1Lens.lens,
       ...V2Lens.lens,
     ]);
 
     assert.deepEqual(
-      doc1.lensesFromTo("projectv2", "mu"),
+      Cambria.lensesFromTo(doc1.cloudinaState,"projectv2", "mu"),
       reverseLens([...V1Lens.lens, ...V2Lens.lens])
     );
 
-    assert.deepEqual(doc1.lensesFromTo("projectv1", "projectv2"), V2Lens.lens);
+    assert.deepEqual(Cambria.lensesFromTo(doc1.cloudinaState,"projectv1", "projectv2"), V2Lens.lens);
   });
 });

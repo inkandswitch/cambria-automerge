@@ -70,6 +70,11 @@ export interface AutomergeChange {
   change: Change;
 }
 
+export interface CloudinaState {
+  graph: Graph;
+  jsonschema7: { [schema: string]: JSONSchema7 };
+}
+
 export type InitOptions = {
   actorId?: string;
   schema?: string;
@@ -105,24 +110,27 @@ export function getChanges(doc: CambriaState, haveDeps: Clock): CambriaBlock[] {
 export class CambriaState {
   schema: string;
   history: CambriaBlock[];
+  cloudinaState : CloudinaState;
   private instances: { [schema: string]: Instance };
-  private graph: Graph;
-  private jsonschema7: { [schema: string]: JSONSchema7 };
 
   constructor(opts: InitOptions) {
     this.schema = opts.schema || "mu";
     this.history = [];
     this.instances = {};
-    this.graph = new Graph();
-    this.jsonschema7 = { mu: emptySchema };
-    this.graph.setNode("mu", true);
+
+    this.cloudinaState = {
+       jsonschema7: { mu: emptySchema },
+       graph: new Graph()
+    }
+    this.cloudinaState.graph.setNode("mu", true);
 
     for (let lens of opts.lenses || []) {
-      this.addLens(lens);
+      addLens(this.cloudinaState,lens);
     }
   }
 
   applyLocalChange(request: Change): AutomergePatch {
+    /*
     const instance = this.instances[this.schema];
 
     if (instance === undefined) {
@@ -152,38 +160,15 @@ export class CambriaState {
     };
 
     this.history.push(block);
-    this.applySchemaChanges([block], this.schemas);
+    this.applySchemaChanges([block]);
 
     return patch;
+     */
+    throw new RangeError("unimplemented");
   }
 
   reset() {
     this.instances = {};
-  }
-
-  addLens(block: RegisteredLens) {
-    const from = block.from;
-    const to = block.to;
-    const lens = block.lens;
-
-    // we reqire for now that lenses be loaded in the right order - from before to
-    if (!this.graph.node(from)) {
-      throw new RangeError(`unknown schema ${from}`);
-    }
-
-    // if to exists this is a dup - ignore
-    if (this.graph.node(to)) {
-      return;
-    }
-
-    // if there's already a lens between two schemas, don't add this new one
-    // if (this.graph.edge({ v: lens.source, w: lens.destination })) return
-
-    this.graph.setNode(to, true);
-    this.graph.setEdge(from, to, lens);
-    this.graph.setEdge(to, from, reverseLens(lens));
-
-    this.jsonschema7[to] = updateSchema(this.jsonschema7[from], lens);
   }
 
   // take a change and apply it everywhere
@@ -192,7 +177,10 @@ export class CambriaState {
 
   applyChanges(blocks: CambriaBlock[]): AutomergePatch {
     this.history.push(...blocks);
-    return this.applySchemaChanges(blocks, this.schemas);
+    const instance = this.getInstance[this.schema]
+    const [ newInstance, patch ] =  this.applySchemaChanges(blocks, instance, this.cloudinaState)
+    this.instances[this.schema] = newInstance
+    return patch
   }
 
   getChanges(haveDeps: Clock): CambriaBlock[] {
@@ -206,10 +194,10 @@ export class CambriaState {
       .sort((a, b) => (a === schema ? 1 : -1));
   }
 
-  convertOp(change: Change, index: number, from: Instance, to: Instance): Op[] {
+  convertOp(change: Change, index: number, from: Instance, to: Instance, graph: CloudinaGraph): Op[] {
     const op = change.ops[index];
-    const lensStack = this.lensesFromTo(from.schema, to.schema);
-    const jsonschema7 = this.jsonschema7[from.schema];
+    const lensStack = lensesFromTo(graph, from.schema, to.schema);
+    const jsonschema7 = graph.jsonschema7[from.schema];
     const patch = opToPatch(op, from);
     const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
     const convertedOps = patchToOps(convertedPatch, change, index, to);
@@ -217,16 +205,25 @@ export class CambriaState {
     return convertedOps;
   }
 
-  convertChange(block: AutomergeChange, to: string): Change {
-    const lensStack = this.lensesFromTo(block.schema, to);
+  getInstanceAt(schema: string, when: Clock, graph: CloudinaState) {
+    const index = this.history.find( block => clockEquals(block.change.clock, when))
+
+    const blocksToApply = this.history.slice(instance.historyCounter,index)
+    this.applySchemaChanges(blocksToApply, schema, graph)
+    instance.historyCounter = index
+  }
+
+  convertChange(block: AutomergeChange, target: Instance, graph: CloudinaState): Change {
+    const lensStack = lensesFromTo(graph, block.schema, target.schema);
 
     const ops: Op[] = [];
 
-    let from_instance = this.cloneInstance(block.schema);
-    let to_instance = this.cloneInstance(to);
+    let from_instance = this.getInstanceAt(block.schema, block.change.clock, graph);
+    let to_instance = { ... target }
 
     for (let i = 0; i < block.change.ops.length; i++) {
       const op = block.change.ops[i];
+      // FIXME convertOp is pure if we pass in graph
       const convertedOps = this.convertOp(
         block.change,
         i,
@@ -234,23 +231,9 @@ export class CambriaState {
         to_instance
       );
       ops.push(...convertedOps);
-      from_instance = this.applyOps(from_instance, [op]);
-      to_instance = this.applyOps(to_instance, convertedOps);
+      from_instance = applyOps(from_instance, [op]);
+      to_instance = applyOps(to_instance, convertedOps);
     }
-
-    /*
-    const from = this.getInstanceAtSeq(block.schema, block.seq) // assume clones
-    const to = this.getInstanceAtSeq(to, block.seq)
-
-    for (let op of block.change.ops) {
-      const convertedOps = this.convertOp(op, from, to);
-      ops.push(... convertedOps)
-      from = this.applyOps(from, [op])
-      to = this.applyOps(to, convertedOps)
-    }
-
-    // save cange to getInstanceAtSeq can do something with it
-    */
 
     const change = {
       ops,
@@ -263,216 +246,46 @@ export class CambriaState {
     return change;
   }
 
-  applyOps(instance: Instance, ops: Op[]): Instance {
-    // construct a change out of the ops
-    const change = {
-      ops,
-      message: "",
-      actor: CAMBRIA_MAGIC_ACTOR,
-      seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0) + 1,
-      deps: instance.deps,
-    };
-
-    const [newInstance, _] = this.applyChangesToInstance(instance, [change]);
-    return newInstance;
-  }
-
   // write a change to the instance,
   // and update all the metadata we're keeping track of in the Instance
   // only apply changes through this function!!
-  applyChangesToInstance(
-    instance: Instance,
-    changes: Change[]
-  ): [Instance, AutomergePatch] {
-    // FIXME
-    //fillOutDeps(instance.deps, changesToApply)
-    //fillOutStartOps()
-    //fillOutPred()
-
-    const [backendState, patch] = Backend.applyChanges(instance.state, changes);
-
-    return [
-      {
-        clock: patch.clock || {},
-        schema: instance.schema,
-        bootstrapped: instance.bootstrapped,
-        deps: patch.deps || {},
-        // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
-        state: backendState,
-      },
-      patch,
-    ];
-  }
 
   applySchemaChanges(
     blocks: CambriaBlock[],
-    schemas: string[]
+    instance: Instance,
+    graph: CloudinaState
   ): AutomergePatch {
     const changesToApply: Change[] = [];
 
     for (let block of blocks) {
       if (block.kind === "lens") {
-        this.addLens(block);
+        addLens(graph,block);
         continue;
       }
 
-      if (block.schema === this.schema) {
+      if (block.schema === instance.schema) {
         changesToApply.push(block.change);
       } else {
-        const newChange = this.convertChange(block, this.schema);
+        const newChange = this.convertChange(block, instance.schema);
         changesToApply.push(newChange);
       }
     }
 
-    const instance = this.getInstance(this.schema);
-
     if (!instance.bootstrapped) {
       const bootstrapChange = this.bootstrap(instance);
+
+      console.log(deepInspect({ schema: instance.schema, change: bootstrapChange }))
 
       changesToApply.unshift(bootstrapChange);
       instance.bootstrapped = true;
     }
 
-    const [newInstance, patch] = this.applyChangesToInstance(
+    const [newInstance, patch] = applyChangesToInstance(
       instance,
       changesToApply
     );
 
-    this.instances[this.schema] = newInstance;
-
-    return patch;
-  }
-
-  /*
-    const instanceCache = {};
-    const opCache = {};
-    const changeCache = {};
-
-    for (let schema of schemas) {
-      instanceCache[schema] = { ...this.getInstance(schema) };
-      opCache[schema] = [];
-      changeCache[schema] = [];
-    }
-
-    // run the ops through one at a time to apply the change
-    // we're throwing all this away and will start over below
-    // I can probably replace this by lifting the LocalChange code from automerge
-
-    for (let block of blocks) {
-      if (block.kind === "lens") {
-        this.addLens(block.from, block.to, block.lens);
-        continue;
-      }
-
-      for (let i in block.change.ops) {
-        const op = block.change.ops[i];
-        for (let schema of schemas) {
-          const from = instanceCache[block.schema];
-          const to = instanceCache[schema];
-          const convertedOps = this.convertOp(op, from, to);
-          const deps = to.deps; // FIXME - need to actually translate the deps
-          const microChange = {
-            actor: block.change.actor,
-            message: block.change.message,
-            deps,
-            seq: to.seq,
-            startOp: to.startOp,
-            time: 0,
-            ops: convertedOps,
-          };
-          opCache[schema].push(...convertedOps);
-          const binMicroChange = encodeChange(microChange);
-          const [newDoc, patch] = Backend.applyChanges(to.doc, [
-            binMicroChange,
-          ]);
-          to.doc = newDoc;
-          to.seq += 1;
-          to.startOp += 1;
-          to.deps = patch.deps;
-        }
-      }
-
-      for (let schema of schemas) {
-        const instance = this.getInstance(block.schema);
-        const doc = instance.doc;
-        const ops = opCache[schema];
-        const deps = instance.deps;
-        instance.seq += 1;
-        const change: Change = {
-          actor: block.change.actor,
-          message: block.change.message,
-          deps,
-          seq: instance.seq,
-          startOp: instance.startOp,
-          ops,
-          time: 0,
-        };
-        const binChange = encodeChange(change);
-        changeCache[schema].push(binChange);
-        opCache[schema] = [];
-      }
-    }
-
-    // rewind and apply the ops all at once - get the patch
-
-    let finalPatch;
-
-    for (let schema of schemas) {
-      const instance = this.getInstance(schema);
-      const [newDoc, patch] = Backend.applyChanges(
-        instance.doc,
-        changeCache[schema]
-      );
-      // FIXME - startOp / seq
-      instance.doc = newDoc;
-      instance.deps = patch.deps;
-      if (schema === this.schema) {
-        finalPatch = patch;
-      }
-    }
-
-    if (finalPatch === undefined) {
-      finalPatch = Backend.getPatch(this.getInstance(this.schema).doc);
-    }
-
-    return finalPatch;
-  }
-*/
-
-  /*
-  applyChange2(change: Change) {
-    this.history.push(change)
-    //this.clock[change.actor] = change.seq
-    //this.deps = calcDeps(change, this.deps)
-
-    for (const index in change.ops) {
-      if (change.ops[index]) {
-        const op = change.ops[index]
-        op.opId = `${change.startOp + index}@${change.actor}`
-        this.schemas
-          // sort schemas so that op.schema is run last ... FIXME
-          .forEach((schema) => {
-            this.lensOpToSchemaAndApply(op, schema)
-          })
-      }
-    }
-  }
-
-  private lensOpToSchemaAndApply(op: Op, schema: string) {
-    const fromInstance = this.getInstance(op.schema || 'mu')
-    const toInstance = this.getInstance(schema)
-
-    const lenses = this.lensesFromTo(op.schema || 'mu', schema)
-    const patch = opToPatch(op, fromInstance)
-    const jsonschema7 = this.jsonschema7[op.schema || "mu"]
-    const newpatch = applyLensToPatch(lenses, patch, jsonschema7)
-    applyPatch(toInstance, newpatch, op.opId as string)
-  }
-*/
-
-  private cloneInstance(schema: string): Instance {
-    const instance = this.getInstance(schema);
-    return { ...instance };
+    return [ patch, newInstance ];
   }
 
   private getInstance(schema: string): Instance {
@@ -492,7 +305,7 @@ export class CambriaState {
 
   private bootstrap(instance: Instance): Change {
     const urOp = [{ op: "add" as const, path: "", value: {} }];
-    const jsonschema7: JSONSchema7 = this.jsonschema7[instance.schema];
+    const jsonschema7: JSONSchema7 = this.cloudinaState.jsonschema7[instance.schema];
     if (jsonschema7 === undefined) {
       throw new Error(
         `Could not find JSON schema for schema ${instance.schema}`
@@ -519,27 +332,9 @@ export class CambriaState {
   }
 
   get schemas(): string[] {
-    return this.graph.nodes();
+    return this.cloudinaState.graph.nodes();
   }
 
-  public lensesFromTo(from: string, to: string): LensSource {
-    const migrationPaths = alg.dijkstra(this.graph, to);
-    const lenses: LensOp[] = [];
-    if (migrationPaths[from].distance == Infinity) {
-      throw new Error(
-        `Could not find lens path between schemas: ${from} and ${to}`
-      );
-    }
-    if (migrationPaths[from].distance == 0) {
-      return [];
-    }
-    for (let v = from; v != to; v = migrationPaths[v].predecessor) {
-      const w = migrationPaths[v].predecessor;
-      const edge = this.graph.edge({ v, w });
-      lenses.push(...edge);
-    }
-    return lenses;
-  }
 }
 
 function patchToOps(
@@ -581,9 +376,6 @@ function patchToOps(
       } else {
         throw new RangeError(`bad op type for patchop=${deepInspect(patchop)}`);
       }
-
-      "/foo/bar/baz";
-      "/foo/bar";
 
       let path_parts = patchop.path.split("/");
       let key = path_parts.pop();
@@ -671,18 +463,36 @@ export function buildPath(op: Op, instance: Instance): string {
   const backendState: any = instance.state;
   const opSet = backendState.state;
   let obj = op.obj;
-  let path: string[] = [];
-  while (obj !== ROOT_ID) {
-    const ref = opSet.getIn(["byObject", obj, "_inbound"], Set()).first();
-    if (!ref) throw new RangeError(`No path found to object ${obj}`);
-    path.unshift(ref as string);
-    obj = ref.get("obj");
-  }
+  let path : string[] = getPath(instance.state, obj) || []
+  console.log(deepInspect({ path }))
   const finalPath = "/" + path.join("/") + op.key;
   return finalPath;
 }
 
+function getPath(state: any, obj: string) : (string[] | null) {
+  const opSet = state.get('opSet')
+  let path : string[] = []
+  while (obj !== ROOT_ID) {
+    const ref = opSet.getIn(['byObject', obj, '_inbound'], Set()).first()
+    if (!ref) return null
+    obj = ref.get('obj')
+    const objType = opSet.getIn(['byObject', obj, '_init', 'action'])
+
+    if (objType === 'makeList' || objType === 'makeText') {
+      const index = opSet.getIn(['byObject', obj, '_elemIds']).indexOf(ref.get('key'))
+      if (index < 0) return null
+      path.unshift(index)
+    } else {
+      path.unshift(ref.get('key'))
+    }
+  }
+  return path
+}
+
 export function opToPatch(op: Op, instance: Instance): CloudinaPatch {
+  if (op.obj) {
+    console.log(deepInspect({ op: op.obj, path: getPath(instance.state, op.obj)}))
+  }
   switch (op.action) {
     case "set": {
       const path = buildPath(op, instance);
@@ -714,4 +524,93 @@ function calcDeps(change: Change, deps: Clock): Clock {
   }
   newDeps[change.actor] = change.seq;
   return newDeps;
+}
+
+function lessOrEqual(clock1, clock2) : boolean {
+  return Object.keys(clock1).concat(Object.keys(clock2)).reduce(
+    (result, key) => (result && (clock1[key] || 0) <= (clock2[key] || 0)),
+    true)
+}
+
+function clockEquals(clock1, clock2) : boolean {
+  return lessOrEqual(clock1, clock2) && lessOrEqual(clock2, clock1)
+}
+
+function applyChangesToInstance(
+    instance: Instance,
+    changes: Change[]
+  ): [Instance, AutomergePatch] {
+
+    const [backendState, patch] = Backend.applyChanges(instance.state, changes);
+
+    return [
+      {
+        clock: patch.clock || {},
+        schema: instance.schema,
+        bootstrapped: instance.bootstrapped,
+        deps: patch.deps || {},
+        state: backendState,
+      },
+      patch,
+    ];
+}
+
+
+function applyOps(instance: Instance, ops: Op[]): Instance {
+    // construct a change out of the ops
+    const change = {
+      ops,
+      message: "",
+      actor: CAMBRIA_MAGIC_ACTOR,
+      seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0) + 1,
+      deps: instance.deps,
+    };
+
+    const [newInstance, _] = applyChangesToInstance(instance, [change]);
+    return newInstance;
+  }
+
+
+function addLens(state: CloudinaState, block: RegisteredLens) {
+  const from = block.from;
+  const to = block.to;
+  const lens = block.lens;
+
+  // we reqire for now that lenses be loaded in the right order - from before to
+  if (!state.graph.node(from)) {
+    throw new RangeError(`unknown schema ${from}`);
+  }
+
+  // if to exists this is a dup - ignore
+  if (state.graph.node(to)) {
+    return;
+  }
+
+  // if there's already a lens between two schemas, don't add this new one
+  // if (this.graph.edge({ v: lens.source, w: lens.destination })) return
+
+  state.graph.setNode(to, true);
+  state.graph.setEdge(from, to, lens);
+  state.graph.setEdge(to, from, reverseLens(lens));
+
+  state.jsonschema7[to] = updateSchema(state.jsonschema7[from], lens);
+}
+
+export function lensesFromTo(cloudinaState: CloudinaState, from: string, to: string): LensSource {
+  const migrationPaths = alg.dijkstra(cloudinaState.graph, to);
+  const lenses: LensOp[] = [];
+  if (migrationPaths[from].distance == Infinity) {
+    throw new Error(
+      `Could not find lens path between schemas: ${from} and ${to}`
+    );
+  }
+  if (migrationPaths[from].distance == 0) {
+    return [];
+  }
+  for (let v = from; v != to; v = migrationPaths[v].predecessor) {
+    const w = migrationPaths[v].predecessor;
+    const edge = cloudinaState.graph.edge({ v, w });
+    lenses.push(...edge);
+  }
+  return lenses;
 }
