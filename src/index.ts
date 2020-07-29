@@ -212,7 +212,9 @@ export class CambriaState {
     const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
     const convertedOps = patchToOps(convertedPatch, change, index, to);
 
-    console.log({ op, patch, convertedPatch, convertedOps });
+    // a convenient debug print to see the pipeline:
+    // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
+    // console.log({ op, patch, convertedPatch, convertedOps });
 
     return convertedOps;
   }
@@ -280,7 +282,7 @@ export class CambriaState {
       message: block.change.message,
       actor: block.change.actor,
       seq: block.change.seq,
-      deps: to_instance.deps,
+      deps: block.change.deps, // todo: does this make sense? I think so?
     };
 
     return change;
@@ -512,12 +514,12 @@ export function buildPath(op: Op, instance: Instance): string {
   const opSet = backendState.state;
   let obj = op.obj;
   let path: string[] = getPath(instance.state, obj) || [];
-  console.log(deepInspect({ path }));
   const finalPath = "/" + [...path, op.key].join("/");
   return finalPath;
 }
 
 // Given a json path in a json doc, return the object ID at that path
+// Todo: support lists
 function getObjId(state: any, path: string): string {
   if (path === "") return ROOT_ID;
 
@@ -528,7 +530,7 @@ function getObjId(state: any, path: string): string {
 
   for (const pathSegment of pathSegments) {
     const objectKeys = opSet.getIn(["byObject", objectId]);
-    // todo: don't just take the first one here -- pick the right one
+    // todo: don't just take the first one here -- pick the right one (sort by seq?)
     objectId = objectKeys.getIn(["_keys", pathSegment, 0, "value"]);
   }
 
