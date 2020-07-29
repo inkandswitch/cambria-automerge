@@ -365,8 +365,6 @@ describe("Has basic schema tools", () => {
 
       const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
 
-      console.log(deepInspect({ patch2 }));
-
       const [doc3, patch3] = Cambria.applyChanges(doc1, [
         {
           kind: "change" as const,
