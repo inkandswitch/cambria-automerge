@@ -22,7 +22,6 @@ import {
   reverseLens,
   applyLensToPatch,
 } from "cloudina";
-import * as Automerge from "automerge";
 import { inspect } from "util";
 
 // applyPatch PATCH needs to become - buildChange
@@ -95,13 +94,9 @@ export function applyLocalChange(
   return [doc, patch];
 }
 
-export function getChanges(
-  doc: CambriaState,
-  haveDeps: Clock
-): CambriaBlock[] {
+export function getChanges(doc: CambriaState, haveDeps: Clock): CambriaBlock[] {
   return doc.getChanges(haveDeps);
 }
-
 
 export class CambriaState {
   schema: string;
@@ -251,7 +246,7 @@ export class CambriaState {
       message: block.change.message,
       actor: block.change.actor,
       seq: block.change.seq,
-      deps: to_instance.deps
+      deps: to_instance.deps,
     };
 
     return change;
@@ -263,7 +258,7 @@ export class CambriaState {
       ops,
       message: "",
       actor: CAMBRIA_MAGIC_ACTOR,
-      seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0)+ 1,
+      seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0) + 1,
       deps: instance.deps,
     };
 
@@ -283,10 +278,7 @@ export class CambriaState {
     //fillOutStartOps()
     //fillOutPred()
 
-    const [backendState, patch] = Backend.applyChanges(
-      instance.state,
-      changes
-    );
+    const [backendState, patch] = Backend.applyChanges(instance.state, changes);
 
     return [
       {
@@ -467,8 +459,8 @@ export class CambriaState {
 */
 
   private cloneInstance(schema: string): Instance {
-    const instance = this.getInstance(schema)
-    return { ... instance }
+    const instance = this.getInstance(schema);
+    return { ...instance };
   }
 
   private getInstance(schema: string): Instance {
@@ -506,8 +498,9 @@ export class CambriaState {
     const migrationPaths = alg.dijkstra(this.graph, to);
     const lenses: LensOp[] = [];
     if (migrationPaths[from].distance == Infinity) {
-      console.log("infinity... error?");
-      return []; // error?
+      throw new Error(
+        `Could not find lens path between schemas: ${from} and ${to}`
+      );
     }
     if (migrationPaths[from].distance == 0) {
       return [];
@@ -563,7 +556,7 @@ function patchToOps(patch: CloudinaPatch, instance: Instance): Op[] {
     const insert = false; // FIXME
 
     if (patchop.op === "add" || patchop.op === "replace") {
-      return { action, obj, key, value: patchop.value  };
+      return { action, obj, key, value: patchop.value };
     } else {
       return { action, obj, key };
     }
@@ -727,13 +720,13 @@ export function opToPatch(op: Op, instance: Instance): CloudinaPatch {
     case "set": {
       const path = buildPath(op, instance);
       const { value } = op;
-      const action = "replace"
+      const action = "replace";
       return [{ op: action, path, value }];
     }
     case "ins": {
       const path = buildPath(op, instance);
       const { value } = op;
-      const action = "add"
+      const action = "add";
       return [{ op: action, path, value }];
     }
     case "del": {
