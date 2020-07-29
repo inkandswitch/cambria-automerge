@@ -519,21 +519,17 @@ export function buildPath(op: Op, instance: Instance): string {
 
 // Given a json path in a json doc, return the object ID at that path
 function getObjId(state: any, path: string): string {
-  const pathSegments = path.split("/").slice(-1);
-  console.log({ pathSegments });
+  if (path === "") return ROOT_ID;
+
+  const pathSegments = path.split("/").slice(1);
   const opSet = state.get("opSet");
-  console.log(
-    "object ids",
-    deepInspect(opSet.getIn(["byObject", ROOT_ID]).toJS())
-  );
 
   let objectId = ROOT_ID;
 
   for (const pathSegment of pathSegments) {
-    console.log({ pathSegment, objectId });
     const objectKeys = opSet.getIn(["byObject", objectId]);
     // todo: don't just take the first one here -- pick the right one
-    objectId = objectKeys._keys[pathSegment][0].value;
+    objectId = objectKeys.getIn(["_keys", pathSegment, 0, "value"]);
   }
 
   return objectId;
