@@ -447,23 +447,3 @@ describe("Has basic schema tools", () => {
 
   // lists
 });
-
-describe("lensFromTo", () => {
-  it("correctly computes a lens path", () => {
-    const doc1 = Cambria.init({ schema: "projectv2", lenses: AllLenses });
-    assert.deepEqual(
-      Cambria.lensesFromTo(doc1.cloudinaState, "mu", "projectv2"),
-      [...V1Lens.lens, ...V2Lens.lens]
-    );
-
-    assert.deepEqual(
-      Cambria.lensesFromTo(doc1.cloudinaState, "projectv2", "mu"),
-      reverseLens([...V1Lens.lens, ...V2Lens.lens])
-    );
-
-    assert.deepEqual(
-      Cambria.lensesFromTo(doc1.cloudinaState, "projectv1", "projectv2"),
-      V2Lens.lens
-    );
-  });
-});

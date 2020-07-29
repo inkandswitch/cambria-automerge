@@ -801,11 +801,12 @@ cliui@^5.0.0:
 
 "cloudina@ssh://git@github.com:inkandswitch/cloudina.git":
   version "0.1.0"
-  resolved "ssh://git@github.com:inkandswitch/cloudina.git#e92eeb4670b9cb3473fbdd7c43a89eaa814aa7d6"
+  resolved "ssh://git@github.com:inkandswitch/cloudina.git#af1a29ddcc30225f0b90558206210cb7d568c5ed"
   dependencies:
     commander "^5.1.0"
     fast-json-patch "^3.0.0-1"
     generate-schema "^2.6.0"
+    graphlib "^2.1.8"
     is-url "^1.2.4"
     js-yaml "^3.14.0"
     json-schema "^0.2.5"
