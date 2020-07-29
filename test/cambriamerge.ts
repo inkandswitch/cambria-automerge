@@ -360,23 +360,43 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    it.skip("can accept a real change", () => {
+    it("can accept a real change", () => {
       const doc1 = Cambria.init({ schema: "projectv1" });
 
       const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
 
-      const [doc3, patch3] = Cambria.applyChanges(doc2, [V1FirstWrite]);
+      console.log({ patch2 });
 
-      assert.deepEqual(patch3.diffs, [
+      const [doc3, patch3] = Cambria.applyChanges(doc1, [
         {
-          action: "set",
-          key: "title",
-          obj: "00000000-0000-0000-0000-000000000000",
-          path: [],
-          type: "map",
-          value: "hello",
+          kind: "change" as const,
+          schema: "projectv1",
+          change: {
+            message: "",
+            actor: ACTOR_ID_1,
+            seq: 1,
+            deps: { "0000000000": 1 },
+            ops: [
+              {
+                action: "set" as const,
+                obj: "details_objid", // FIXME: set to obj id of details obj
+                key: "title",
+                value: "hello",
+              },
+            ],
+          },
         },
       ]);
+
+      let doc = Frontend.init();
+      doc = Frontend.applyPatch(doc, patch2);
+
+      assert.deepEqual(doc, {
+        details: {
+          title: "hello",
+          summary: "",
+        },
+      });
     });
   });
 
