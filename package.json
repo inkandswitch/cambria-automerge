@@ -10,7 +10,8 @@
   "dependencies": {
     "automerge": "0.14.1",
     "cloudina": "ssh://git@github.com:inkandswitch/cloudina.git",
-    "graphlib": "^2.1.8"
+    "graphlib": "^2.1.8",
+    "uuid": "^8.3.0"
   },
   "devDependencies": {
     "@types/graphlib": "^2.1.6",

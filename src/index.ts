@@ -2,6 +2,10 @@ import { Graph, alg } from "graphlib";
 
 import { Set } from "immutable";
 
+import { v5 } from "uuid"
+
+const MAGIC_UUID = 'f1bb7a0b-2d26-48ca-aaa3-92c63bbb5c50'
+
 // This import doesn't pull in types for the Backend functions,
 // maybe because we're importing from a non-root file?
 import {
@@ -202,12 +206,13 @@ export class CambriaState {
       .sort((a, b) => (a === schema ? 1 : -1));
   }
 
-  convertOp(op: Op, from: Instance, to: Instance): Op[] {
+  convertOp(change: Change, index: number, from: Instance, to: Instance): Op[] {
+    const op = change.ops[index]
     const lensStack = this.lensesFromTo(from.schema, to.schema);
     const jsonschema7 = this.jsonschema7[from.schema];
     const patch = opToPatch(op, from);
     const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
-    const convertedOps = patchToOps(convertedPatch, to);
+    const convertedOps = patchToOps(convertedPatch, change, index, to);
 
     return convertedOps;
   }
@@ -220,8 +225,9 @@ export class CambriaState {
     let from_instance = this.cloneInstance(block.schema);
     let to_instance = this.cloneInstance(to);
 
-    for (let op of block.change.ops) {
-      const convertedOps = this.convertOp(op, from_instance, to_instance);
+    for (let i = 0; i < block.change.ops.length ; i++) {
+      const op = block.change.ops[i]
+      const convertedOps = this.convertOp(block.change, i, from_instance, to_instance);
       ops.push(...convertedOps);
       from_instance = this.applyOps(from_instance, [op]);
       to_instance = this.applyOps(to_instance, convertedOps);
@@ -483,15 +489,17 @@ export class CambriaState {
     const urOp = [{ op: "add" as const, path: "", value: {} }];
     const jsonschema7 = this.jsonschema7[instance.schema];
     const defaultsPatch = applyLensToPatch([], urOp, jsonschema7).slice(1);
-    //const bootstrapChange = buildBootstrapChange(defaultsPatch);
-    const ops = patchToOps(defaultsPatch, instance)
-    const bootstrapChange = {
+
+    const bootstrapChange : Change = {
       actor: CAMBRIA_MAGIC_ACTOR,
       message: "",
       deps: {},
       seq: 1,
-      ops,
+      ops: [],
     }
+
+    bootstrapChange.ops = patchToOps(defaultsPatch, bootstrapChange, 1, instance)
+
     return bootstrapChange;
   }
 
@@ -519,12 +527,12 @@ export class CambriaState {
   }
 }
 
-function patchToOps(patch: CloudinaPatch, instance: Instance): Op[] {
+function patchToOps(patch: CloudinaPatch, origin: Change, opIndex: number, instance: Instance): Op[] {
   const opCache = {};
   const pathCache = {[""]:ROOT_ID}
   const ops = patch.map((patchop, i) => {
     const acc : Op[] = []
-    let makeObj = 'fffff'
+    let makeObj = v5(`${origin.actor}:${origin.seq}:${opIndex}:${i}"`, MAGIC_UUID)
     let action;
     if (patchop.op === "remove") {
       action = "del";

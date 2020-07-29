@@ -365,7 +365,7 @@ describe("Has basic schema tools", () => {
 
       const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
 
-      console.log({ patch2 });
+      console.log(deepInspect({ patch2 }));
 
       const [doc3, patch3] = Cambria.applyChanges(doc1, [
         {
@@ -379,7 +379,7 @@ describe("Has basic schema tools", () => {
             ops: [
               {
                 action: "set" as const,
-                obj: "details_objid", // FIXME: set to obj id of details obj
+                obj: patch2.diffs[0].obj,
                 key: "title",
                 value: "hello",
               },
@@ -390,6 +390,7 @@ describe("Has basic schema tools", () => {
 
       let doc = Frontend.init();
       doc = Frontend.applyPatch(doc, patch2);
+      doc = Frontend.applyPatch(doc, patch3);
 
       assert.deepEqual(doc, {
         details: {
