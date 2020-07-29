@@ -316,7 +316,8 @@ export class CambriaState {
     const instance = this.getInstance(this.schema);
 
     if (!instance.bootstrapped) {
-      const bootstrapChange = this.bootstrap(this.schema);
+      const bootstrapChange = this.bootstrap(instance)
+
       changesToApply.unshift(bootstrapChange);
       instance.bootstrapped = true;
     }
@@ -473,20 +474,24 @@ export class CambriaState {
         bootstrapped: false,
         clock: {},
       };
-      //this.bootstrap(instance, schema);
       this.instances[schema] = instance;
     }
     return this.instances[schema];
   }
 
-  private bootstrap(schema: string): Change {
+  private bootstrap(instance: Instance): Change {
     const urOp = [{ op: "add" as const, path: "", value: {} }];
-    const jsonschema7 = this.jsonschema7[schema];
+    const jsonschema7 = this.jsonschema7[instance.schema];
     const defaultsPatch = applyLensToPatch([], urOp, jsonschema7).slice(1);
-    const bootstrapChange = buildBootstrapChange(
-      CAMBRIA_MAGIC_ACTOR,
-      defaultsPatch
-    );
+    //const bootstrapChange = buildBootstrapChange(defaultsPatch);
+    const ops = patchToOps(defaultsPatch, instance)
+    const bootstrapChange = {
+      actor: CAMBRIA_MAGIC_ACTOR,
+      message: "",
+      deps: {},
+      seq: 1,
+      ops,
+    }
     return bootstrapChange;
   }
 
@@ -516,7 +521,10 @@ export class CambriaState {
 
 function patchToOps(patch: CloudinaPatch, instance: Instance): Op[] {
   const opCache = {};
+  const pathCache = {[""]:ROOT_ID}
   const ops = patch.map((patchop, i) => {
+    const acc : Op[] = []
+    let makeObj = 'fffff'
     let action;
     if (patchop.op === "remove") {
       action = "del";
@@ -532,7 +540,9 @@ function patchToOps(patch: CloudinaPatch, instance: Instance): Op[] {
         typeof patchop.value === "object" &&
         Object.keys(patchop.value).length === 0
       ) {
-        action = "makeMap";
+        action = "link";
+        acc.push({ action: "makeMap", obj: makeObj })
+        pathCache[patchop.path] = makeObj
       } else {
         throw new RangeError(`bad value for patchop=${deepInspect(patchop)}`);
       }
@@ -540,105 +550,29 @@ function patchToOps(patch: CloudinaPatch, instance: Instance): Op[] {
       throw new RangeError(`bad op type for patchop=${deepInspect(patchop)}`);
     }
 
-    let key = patchop.path.split("/").slice(-1)[0];
+    "/foo/bar/baz"
+    "/foo/bar"
 
-    const opSet = (instance.state as any).state;
+    let path_parts = patchop.path.split("/");
+    let key = path_parts.pop()
+    let obj_path = path_parts.join("/")
 
-    const obj = ROOT_ID;
+    const obj = pathCache[obj_path]
 
-    const objIsList = false; // FIXME
-
-    if (objIsList) {
-      key = key; // FIXME
-    }
-
-    //const insert = patchop.op === "add" && obj !== ROOT_ID && objIsList
-    const insert = false; // FIXME
-
-    if (patchop.op === "add" || patchop.op === "replace") {
-      return { action, obj, key, value: patchop.value };
+    if (action === 'link') {
+      const op = { action, obj, key, value: makeObj }
+      acc.push(op)
+    } else if (patchop.op === "add" || patchop.op === "replace") {
+      const op = { action, obj, key, value: patchop.value };
+      acc.push(op)
     } else {
-      return { action, obj, key };
+      const op = { action, obj, key };
+      acc.push(op)
     }
-  });
+    return acc
+  }).flat();
 
   return ops;
-}
-
-function buildBootstrapChange(actor: string, patch: CloudinaPatch): Change {
-  const opCache = {};
-  const pathToOpId = { [""]: ROOT_ID };
-  const ops = patch.map((patchop, i) => {
-    let action;
-    if (patchop.op === "remove") {
-      action = "del";
-    } else if (patchop.op === "add" || patchop.op === "replace") {
-      if (
-        patchop.value === null ||
-        ["string", "number", "boolean"].includes(typeof patchop.value)
-      ) {
-        action = "set";
-      } else if (Array.isArray(patchop.value)) {
-        action = "makeList";
-      } else if (
-        typeof patchop.value === "object" &&
-        Object.keys(patchop.value).length === 0
-      ) {
-        action = "makeMap";
-      } else {
-        throw new RangeError(`bad value for patchop=${deepInspect(patchop)}`);
-      }
-    } else {
-      throw new RangeError(`bad op type for patchop=${deepInspect(patchop)}`);
-    }
-    const opId = `${1 + i}@${actor}`;
-    if (action.startsWith("make")) {
-      pathToOpId[patchop.path] = opId;
-    }
-    const regex = /^(.*)\/([^/]*$)/;
-    // /foo -> "" "foo"
-    // /foo/bar -> "/foo" "bar"
-    // /foo/bar/baz -> "/foo/bar" "baz"
-
-    const match = regex.exec(patchop.path);
-    if (!match) {
-      throw new RangeError(`bad path in patchop ${deepInspect(patchop)}`);
-    }
-    const obj_path = match[1];
-    const key = match[2];
-    const obj = pathToOpId[obj_path];
-    if (!obj) {
-      throw new RangeError(
-        `failed to look up obj_id for path ${deepInspect(
-          patchop
-        )} :: ${deepInspect(pathToOpId)}`
-      );
-    }
-
-    //const path = patchop.path.split('/').slice(1)
-    //const { obj, key } = instance.processPath(path, patchop.op === 'add')
-    const insert =
-      patchop.op === "add" &&
-      obj !== ROOT_ID &&
-      opCache[obj].action === "makeList";
-    if (patchop.op === "add" || patchop.op === "replace") {
-      const op = { action, obj, key, insert, value: patchop.value, pred: [] };
-      opCache[opId] = op;
-      return op;
-    } else {
-      const op = { action, obj, key, insert, pred: [] };
-      opCache[opId] = op;
-      return op;
-    }
-  });
-  const change = {
-    actor,
-    message: "",
-    deps: {},
-    seq: 1,
-    ops,
-  };
-  return change;
 }
 
 /*
