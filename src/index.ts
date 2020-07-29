@@ -214,8 +214,6 @@ export class CambriaState {
     const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
     const convertedOps = patchToOps(convertedPatch, to);
 
-    console.log("convertOp", { op, patch, convertedPatch, convertedOps });
-
     return convertedOps;
   }
 
@@ -253,7 +251,7 @@ export class CambriaState {
       message: block.change.message,
       actor: block.change.actor,
       seq: block.change.seq,
-      deps: {}
+      deps: to_instance.deps
     };
 
     return change;
