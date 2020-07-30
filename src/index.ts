@@ -517,8 +517,9 @@ function getObjId(state: any, path: string): ObjectId | null {
 
   for (const pathSegment of pathSegments) {
     const objectKeys = opSet.getIn(["byObject", objectId]);
-    // todo: the metadata for this key has an array, sometimes w/ multiple obj IDs
-    // for now we just take the first one, but maybe there's a more correct way?
+
+    // _keys contains an array for each key in case there are conflicts;
+    // it's sorted so we can just take the first element
     const newObjectId = objectKeys.getIn(["_keys", pathSegment, 0, "value"]);
 
     // Sometimes, the path we're looking for isn't in the instance, give up
