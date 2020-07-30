@@ -220,6 +220,7 @@ function convertOp(
 
   // a convenient debug print to see the pipeline:
   // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
+  console.log("\nCONVERSION PIPELINE:");
   console.log({ op, patch, convertedPatch, convertedOps });
 
   return convertedOps;

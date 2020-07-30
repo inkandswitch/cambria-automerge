@@ -3,7 +3,12 @@ import { inspect } from "util";
 import { addProperty, renameProperty, LensSource, reverseLens } from "cloudina";
 import * as Cambria from "../src/index";
 import { Frontend } from "automerge";
-import { inside, plungeProperty, removeProperty } from "cloudina/dist/helpers";
+import {
+  inside,
+  plungeProperty,
+  removeProperty,
+  hoistProperty,
+} from "cloudina/dist/helpers";
 
 const ACTOR_ID_1 = "111111";
 const ACTOR_ID_2 = "222222";
@@ -357,8 +362,6 @@ describe("Has basic schema tools", () => {
       inside("details", [renameProperty("title", "name")]),
     ];
 
-    const PlungeSummary: LensSource = [plungeProperty("details", "created_at")];
-
     const V1Lens = {
       kind: "lens" as const,
       from: "mu",
@@ -373,11 +376,11 @@ describe("Has basic schema tools", () => {
       lens: ProjectV2,
     };
 
-    const PlungeLens = {
+    const plungeLens = {
       kind: "lens" as const,
       from: "projectv2",
-      to: "project-plunge-summary",
-      lens: PlungeSummary,
+      to: "project-plunge-createdat",
+      lens: [plungeProperty("details", "created_at")],
     };
 
     it("can accept a single schema and fill out default values", () => {
@@ -478,10 +481,10 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    it("can plunge an object", () => {
+    it("can plunge a property", () => {
       const doc1 = Cambria.init({
-        schema: "project-plunge-summary",
-        lenses: [V1Lens, V2Lens, PlungeLens],
+        schema: "project-plunge-createdat",
+        lenses: [V1Lens, V2Lens, plungeLens],
       });
 
       const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
@@ -515,6 +518,55 @@ describe("Has basic schema tools", () => {
         details: {
           name: "",
           created_at: "recently",
+          summary: "",
+        },
+      });
+    });
+
+    it("can hoist a property", () => {
+      const hoistLens = {
+        kind: "lens" as const,
+        from: "projectv2",
+        to: "project-hoist-title",
+        lens: [hoistProperty("details", "name")],
+      };
+
+      const doc1 = Cambria.init({
+        schema: "project-hoist-title",
+        lenses: [V1Lens, V2Lens, hoistLens],
+      });
+
+      const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
+
+      const [doc3, patch3] = Cambria.applyChanges(doc1, [
+        {
+          kind: "change" as const,
+          schema: "projectv1",
+          change: {
+            message: "",
+            actor: ACTOR_ID_1,
+            seq: 1,
+            deps: { "0000000000": 1 },
+            ops: [
+              {
+                action: "set" as const,
+                obj: patch2.diffs[0].obj,
+                key: "title",
+                value: "hello",
+              },
+            ],
+          },
+        },
+      ]);
+
+      let doc = Frontend.init();
+      doc = Frontend.applyPatch(doc, patch2);
+      doc = Frontend.applyPatch(doc, patch3);
+
+      assert.deepEqual(doc, {
+        created_at: "",
+        name: "hello",
+        details: {
           summary: "",
         },
       });
