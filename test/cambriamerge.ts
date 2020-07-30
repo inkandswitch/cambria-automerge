@@ -363,6 +363,7 @@ describe("Has basic schema tools", () => {
       doc = Frontend.applyPatch(doc, patch2);
 
       assert.deepEqual(doc, {
+        created_at: "",
         details: {
           title: "",
           summary: "",
@@ -401,6 +402,7 @@ describe("Has basic schema tools", () => {
       doc = Frontend.applyPatch(doc, patch3);
 
       assert.deepEqual(doc, {
+        created_at: "",
         details: {
           title: "hello",
           summary: "",
@@ -442,6 +444,7 @@ describe("Has basic schema tools", () => {
       doc = Frontend.applyPatch(doc, patch3);
 
       assert.deepEqual(doc, {
+        created_at: "",
         details: {
           name: "hello",
           summary: "",
