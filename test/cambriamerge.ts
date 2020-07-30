@@ -485,6 +485,30 @@ describe("Has basic schema tools", () => {
       });
     });
 
+    
+    it.skip("should fill in default values without an explicit empty applyChanges call", () => {
+      let frontendV1 = Frontend.init(ACTOR_ID_1);
+      let initPatch, change
+
+      // Write a realistic V1 change.
+      // establish a cambria backend with a v1 schema
+      let cambriaV1 = Cambria.init({ schema: "projectv1", lenses: [V1Lens] })
+      // the above line should probably read:
+      // let [cambriaV1, initPatch] = Cambria.init({ schema: "projectv1", lenses: [V1Lens] })
+
+      // sync a frontend to it and produce a meaningful change
+      frontendV1 = Frontend.applyPatch(frontendV1, initPatch)
+      ;[frontendV1, change] = Frontend.change(frontendV1, (doc: any) => { doc.details.title = 'hello' })
+      
+      assert.deepEqual(frontendV1, {
+        created_at: "",
+        details: {
+          name: "",
+          summary: "",
+        },
+      });
+    });
+
     it("can convert a rename inside an object", () => {
       const doc1 = Cambria.init({
         schema: "projectv2",
