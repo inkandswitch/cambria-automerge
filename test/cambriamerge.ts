@@ -3,7 +3,7 @@ import { inspect } from "util";
 import { addProperty, renameProperty, LensSource, reverseLens } from "cloudina";
 import * as Cambria from "../src/index";
 import { Frontend } from "automerge";
-import { inside, plungeProperty } from "cloudina/dist/helpers";
+import { inside, plungeProperty, removeProperty } from "cloudina/dist/helpers";
 
 const ACTOR_ID_1 = "111111";
 const ACTOR_ID_2 = "222222";
@@ -313,6 +313,32 @@ describe("Has basic schema tools", () => {
 
     assert.deepEqual(doc, {
       name: "actor 2 says hi",
+      summary: "",
+    });
+  });
+
+  it("can convert with a removeProperty lens", () => {
+    const state1 = Cambria.init({
+      schema: "projectv2",
+      lenses: [
+        V1Lens,
+        // V2 removes the title property
+        {
+          kind: "lens" as const,
+          from: "projectv1",
+          to: "projectv2",
+          lens: [removeProperty({ name: "title", type: "string" })],
+        },
+      ],
+    });
+
+    // V1 writes to the title property, which should become a no-op
+    const [state2, patch2] = Cambria.applyChanges(state1, [V1FirstWrite]);
+
+    let doc = Frontend.init();
+    doc = Frontend.applyPatch(doc, patch2);
+
+    assert.deepEqual(doc, {
       summary: "",
     });
   });
