@@ -1,5 +1,12 @@
 import { Set } from "immutable";
-import { LensGraph, initLensGraph, registerLens, lensGraphSchema, lensFromTo, lensGraphSchemas } from 'cloudina/dist/lens-graph'
+import {
+  LensGraph,
+  initLensGraph,
+  registerLens,
+  lensGraphSchema,
+  lensFromTo,
+  lensGraphSchemas,
+} from "cloudina/dist/lens-graph";
 
 import { v5 } from "uuid";
 
@@ -18,11 +25,7 @@ import {
 
 import { JSONSchema7 } from "json-schema";
 
-import {
-  Patch as CloudinaPatch,
-  LensSource,
-  applyLensToPatch,
-} from "cloudina";
+import { Patch as CloudinaPatch, LensSource, applyLensToPatch } from "cloudina";
 
 import { inspect } from "util";
 
@@ -106,13 +109,14 @@ export class CambriaState {
   lensGraph: LensGraph;
   private instances: { [schema: string]: Instance };
 
-  constructor({schema = 'mu', lenses = []}: InitOptions) {
+  constructor({ schema = "mu", lenses = [] }: InitOptions) {
     this.schema = schema;
     this.history = [];
     this.instances = {};
-    this.lensGraph = lenses.reduce<LensGraph>( (graph, lens) =>
-      registerLens(graph, lens.from, lens.to, lens.lens)
-    , initLensGraph());
+    this.lensGraph = lenses.reduce<LensGraph>(
+      (graph, lens) => registerLens(graph, lens.from, lens.to, lens.lens),
+      initLensGraph()
+    );
   }
 
   applyLocalChange(request: Change): AutomergePatch {
@@ -164,7 +168,7 @@ export class CambriaState {
   applyChanges(blocks: CambriaBlock[]): AutomergePatch {
     this.history.push(...blocks);
     const instance: Instance = this.getInstance(this.schema);
-    const history = this.history
+    const history = this.history;
     const [newInstance, patch, newLensGraph] = applySchemaChanges(
       blocks,
       instance,
@@ -172,7 +176,7 @@ export class CambriaState {
       history
     );
     this.instances[this.schema] = newInstance;
-    this.lensGraph = newLensGraph
+    this.lensGraph = newLensGraph;
     return patch;
   }
 
@@ -244,10 +248,14 @@ function getInstanceAt(
 
   // todo: make sure we set default values even if lens not in doc
   const empty = initInstance(schema);
-  const [instance, _, newGraph] = applySchemaChanges(blocksToApply, empty, graph, history);
+  const [instance, _, newGraph] = applySchemaChanges(
+    blocksToApply,
+    empty,
+    graph,
+    history
+  );
   return [instance, newGraph];
 }
-
 
 function convertChange(
   block: AutomergeChange,
@@ -293,7 +301,7 @@ function applySchemaChanges(
   blocks: CambriaBlock[],
   instance: Instance,
   lensGraph: LensGraph,
-  history: CambriaBlock[],
+  history: CambriaBlock[]
 ): [Instance, AutomergePatch, LensGraph] {
   const changesToApply: Change[] = [];
 
@@ -313,7 +321,12 @@ function applySchemaChanges(
         lensGraph,
         history
       );
-      const newChange = convertChange(block, from_instance, instance, lensGraph);
+      const newChange = convertChange(
+        block,
+        from_instance,
+        instance,
+        lensGraph
+      );
       changesToApply.push(newChange);
     }
   }
@@ -329,21 +342,16 @@ function applySchemaChanges(
     instance.bootstrapped = true;
   }
 
-  const [newInstance, patch] = applyChangesToInstance(
-    instance,
-    changesToApply
-  );
+  const [newInstance, patch] = applyChangesToInstance(instance, changesToApply);
 
   return [newInstance, patch, lensGraph];
 }
 
 function bootstrap(instance: Instance, lensGraph: LensGraph): Change {
   const urOp = [{ op: "add" as const, path: "", value: {} }];
-  const jsonschema7: JSONSchema7 = lensGraphSchema(lensGraph, instance.schema)
+  const jsonschema7: JSONSchema7 = lensGraphSchema(lensGraph, instance.schema);
   if (jsonschema7 === undefined) {
-    throw new Error(
-      `Could not find JSON schema for schema ${instance.schema}`
-    );
+    throw new Error(`Could not find JSON schema for schema ${instance.schema}`);
   }
   const defaultsPatch = applyLensToPatch([], urOp, jsonschema7).slice(1);
 
@@ -355,12 +363,7 @@ function bootstrap(instance: Instance, lensGraph: LensGraph): Change {
     ops: [],
   };
 
-  bootstrapChange.ops = patchToOps(
-    defaultsPatch,
-    bootstrapChange,
-    1,
-    instance
-  );
+  bootstrapChange.ops = patchToOps(defaultsPatch, bootstrapChange, 1, instance);
 
   return bootstrapChange;
 }
@@ -617,4 +620,3 @@ function applyOps(instance: Instance, ops: Op[]): Instance {
   const [newInstance, _] = applyChangesToInstance(instance, [change]);
   return newInstance;
 }
-
