@@ -3,7 +3,7 @@ import { inspect } from "util";
 import { addProperty, renameProperty, LensSource, reverseLens } from "cloudina";
 import * as Cambria from "../src/index";
 import { Frontend } from "automerge";
-import { inside } from "cloudina/dist/helpers";
+import { inside, plungeProperty } from "cloudina/dist/helpers";
 
 const ACTOR_ID_1 = "111111";
 const ACTOR_ID_2 = "222222";
@@ -14,7 +14,8 @@ const ProjectV1: LensSource = [
   addProperty({ name: "summary", type: "string" }),
 ];
 
-const ProjectV2: LensSource = [renameProperty("title", "name")];
+const TitleToName: LensSource = [renameProperty("title", "name")];
+
 
 const V1Lens = {
   kind: "lens" as const,
@@ -27,7 +28,7 @@ const V2Lens = {
   kind: "lens" as const,
   from: "projectv1",
   to: "projectv2",
-  lens: ProjectV2,
+  lens: TitleToName,
 };
 
 const AllLenses: Cambria.RegisteredLens[] = [V1Lens, V2Lens];
@@ -320,6 +321,7 @@ describe("Has basic schema tools", () => {
   describe("nested objects", () => {
     const ProjectV1: LensSource = [
       addProperty({ name: "details", type: "object" }),
+      addProperty({ name: 'created_at', type: 'string'}),
       inside("details", [
         addProperty({ name: "title", type: "string" }),
         addProperty({ name: "summary", type: "string" }),
@@ -330,6 +332,10 @@ describe("Has basic schema tools", () => {
       inside("details", [renameProperty("title", "name")]),
     ];
 
+    const PlungeSummary: LensSource = [ 
+      plungeProperty('details', 'created_at')
+    ]
+    
     const V1Lens = {
       kind: "lens" as const,
       from: "mu",
@@ -343,6 +349,13 @@ describe("Has basic schema tools", () => {
       to: "projectv2",
       lens: ProjectV2,
     };
+        
+    const PlungeLens = {
+      kind: "lens" as const,
+      from: "projectv2",
+      to: "project-plunge-summary",
+      lens: PlungeSummary,
+    }
 
     it("can accept a single schema and fill out default values", () => {
       const doc1 = Cambria.init({ schema: "projectv1" });
@@ -434,6 +447,48 @@ describe("Has basic schema tools", () => {
       assert.deepEqual(doc, {
         details: {
           name: "hello",
+          summary: "",
+        },
+      });
+    });
+    
+    it.only("can plunge an object", () => {
+      const doc1 = Cambria.init({
+        schema: "project-plunge-summary",
+        lenses: [V1Lens, V2Lens, PlungeLens],
+      });
+
+      const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
+
+      const [doc3, patch3] = Cambria.applyChanges(doc1, [
+        {
+          kind: "change" as const,
+          schema: "projectv1",
+          change: {
+            message: "",
+            actor: ACTOR_ID_1,
+            seq: 1,
+            deps: { "0000000000": 1 },
+            ops: [
+              {
+                action: "set" as const,
+                obj: patch2.diffs[0].obj,
+                key: "created_at",
+                value: "recently",
+              },
+            ],
+          },
+        },
+      ]);
+
+      let doc = Frontend.init();
+      doc = Frontend.applyPatch(doc, patch2);
+      doc = Frontend.applyPatch(doc, patch3);
+
+      assert.deepEqual(doc, {
+        details: {
+          name: "",
+          created_at: "recently",
           summary: "",
         },
       });
