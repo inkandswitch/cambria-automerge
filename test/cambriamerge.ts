@@ -571,6 +571,73 @@ describe("Has basic schema tools", () => {
         },
       });
     });
+
+    it.only("can hoist a property from 2 levels deep", () => {
+      const deepNestingLens = {
+        kind: "lens" as const,
+        from: "mu",
+        to: "nested-v1",
+        lens: [
+          addProperty({ name: "branch1", type: "object" }),
+          inside("branch1", [
+            addProperty({ name: "branch2", type: "object" }),
+            inside("branch2", [
+              addProperty({ name: "leaf1", type: "object" }),
+              addProperty({ name: "leaf2", type: "object" }),
+            ]),
+          ]),
+        ],
+      };
+
+      const hoistLens = {
+        kind: "lens" as const,
+        from: "nested-v1",
+        to: "nested-v2",
+        lens: [inside("branch1", [hoistProperty("branch2", "leaf1")])],
+      };
+
+      const doc1 = Cambria.init({
+        schema: "nested-v2",
+        lenses: [deepNestingLens, hoistLens],
+      });
+
+      const [doc2, patch2] = Cambria.applyChanges(doc1, [deepNestingLens]);
+
+      console.log({ patch2 });
+
+      const [doc3, patch3] = Cambria.applyChanges(doc1, [
+        {
+          kind: "change" as const,
+          schema: "nested-v1",
+          change: {
+            message: "",
+            actor: ACTOR_ID_1,
+            seq: 1,
+            deps: { "0000000000": 1 },
+            ops: [
+              {
+                action: "set" as const,
+                obj: "", // todo: fill in object id of branch1
+                key: "title",
+                value: "hello",
+              },
+            ],
+          },
+        },
+      ]);
+
+      let doc = Frontend.init();
+      doc = Frontend.applyPatch(doc, patch2);
+      doc = Frontend.applyPatch(doc, patch3);
+
+      assert.deepEqual(doc, {
+        created_at: "",
+        name: "hello",
+        details: {
+          summary: "",
+        },
+      });
+    });
   });
 
   // nested objects
