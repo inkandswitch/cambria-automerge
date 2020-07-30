@@ -472,7 +472,12 @@ describe("Has basic schema tools", () => {
             ops: [
               {
                 action: "set" as const,
-                obj: patch2.diffs[0].obj,
+                // Todo: this test still passed when setting created_at on the
+                // details obj from v1, which shouldn't be possible -- why?
+                // obj: patch2.diffs[0].obj,
+
+                // V1 sets created_at property on the root obj
+                obj: AUTOMERGE_ROOT_ID,
                 key: "created_at",
                 value: "recently",
               },
