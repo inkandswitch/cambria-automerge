@@ -376,7 +376,7 @@ describe("Has basic schema tools", () => {
       lens: ProjectV2,
     };
 
-    const plungeLens = {
+    const PlungeLens = {
       kind: "lens" as const,
       from: "projectv2",
       to: "project-plunge-createdat",
@@ -401,39 +401,85 @@ describe("Has basic schema tools", () => {
     });
 
     it("can accept a real change", () => {
-      const doc1 = Cambria.init({ schema: "projectv1" });
+      let frontend = Frontend.init(ACTOR_ID_1)
+      let initPatch, change
 
-      const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
+      // establish a cambria backend with a v1 schema
+      let cambria = Cambria.init({ schema: "projectv1" })
+      ;[cambria, initPatch] = Cambria.applyChanges(cambria, [V1Lens])
 
-      const [doc3, patch3] = Cambria.applyChanges(doc1, [
+      // sync a frontend to it and produce a meaningful change
+      frontend = Frontend.applyPatch(frontend, initPatch)
+      ;[frontend, change] = Frontend.change(frontend, (doc: any) => { 
+        doc.details.title = 'hello' 
+      })
+
+      // wrap that change in Cambria details
+      const [, editPatch] = Cambria.applyChanges(cambria, [
         {
           kind: "change" as const,
           schema: "projectv1",
-          change: {
-            message: "",
-            actor: ACTOR_ID_1,
-            seq: 1,
-            deps: { "0000000000": 1 },
-            ops: [
-              {
-                action: "set" as const,
-                obj: patch2.diffs[0].obj,
-                key: "title",
-                value: "hello",
-              },
-            ],
-          },
+          change: change
         },
       ]);
 
-      let doc = Frontend.init();
-      doc = Frontend.applyPatch(doc, patch2);
-      doc = Frontend.applyPatch(doc, patch3);
+      // confirm the resulting patch is correct!
+      frontend = Frontend.applyPatch(frontend, editPatch)
 
-      assert.deepEqual(doc, {
+      assert.deepEqual(frontend, {
         created_at: "",
         details: {
           title: "hello",
+          summary: "",
+        },
+      });
+    });
+
+    
+    it("can apply a change from another V1", () => {
+      let frontendV1 = Frontend.init(ACTOR_ID_1);
+      let initPatch, change
+
+      // Write a realistic V1 change.
+      // establish a cambria backend with a v1 schema
+      let cambriaV1 = Cambria.init({ schema: "projectv1", lenses: [V1Lens] })
+
+      // FIXME: this is grody -- we should do this automatically during Cambria.applyLocalChanges
+      ;[cambriaV1, initPatch] = Cambria.applyChanges(cambriaV1, []);
+
+      // sync a frontend to it and produce a meaningful change
+      frontendV1 = Frontend.applyPatch(frontendV1, initPatch)
+      ;[frontendV1, change] = Frontend.change(frontendV1, (doc: any) => { doc.details.title = 'hello' })
+
+      const cambriaChange = [
+        {
+          kind: "change" as const,
+          schema: "projectv1",
+          change: change
+        },
+      ]
+
+      // wrap that change in Cambria details
+      const [ , editPatch] = Cambria.applyChanges(cambriaV1, cambriaChange);
+      
+      // Apply a V1 change to a V2 backend and read it successfully
+      // establish a cambria backend with a v2 schema
+      let cambriaV2 = Cambria.init({ schema: "projectv2", lenses: [V1Lens, V2Lens]})
+      let frontendV2 = Frontend.init(ACTOR_ID_2);
+
+      let v2Patch
+      
+      // FIXME: this is grody -- we should do this automatically during Cambria.applyLocalChanges
+      ;[cambriaV2, v2Patch] = Cambria.applyChanges(cambriaV2, [])
+      frontendV2 = Frontend.applyPatch(frontendV2, v2Patch);
+
+      ;[cambriaV2, v2Patch] = Cambria.applyChanges(cambriaV2, cambriaChange)
+      frontendV2 = Frontend.applyPatch(frontendV2, v2Patch);
+
+      assert.deepEqual(frontendV2, {
+        created_at: "",
+        details: {
+          name: "hello",
           summary: "",
         },
       });
@@ -484,7 +530,7 @@ describe("Has basic schema tools", () => {
     it("can plunge a property", () => {
       const doc1 = Cambria.init({
         schema: "project-plunge-createdat",
-        lenses: [V1Lens, V2Lens, plungeLens],
+        lenses: [V1Lens, V2Lens, PlungeLens],
       });
 
       const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
