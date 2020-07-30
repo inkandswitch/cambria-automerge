@@ -521,8 +521,10 @@ function findIndexOfElem(
 
 // given an automerge instance, an array obj id, and an index, return the elem ID
 function findElemOfIndex(state: any, objId: ObjectId, index: number): string {
-  const elemId = state.getIn(["opSet", "byObject", objId, "_elemIds"])[index];
-  if (elemId === undefined) {
+  const elemId = state
+    .getIn(["opSet", "byObject", objId, "_elemIds"])
+    .keyOf(index); // todo: is this the right way to look for an index in SkipList?
+  if (elemId === undefined || elemId === null) {
     throw new Error(`Couldn't find array index ${index} in object ${objId}`);
   }
   return elemId;
