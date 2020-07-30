@@ -16,7 +16,6 @@ const ProjectV1: LensSource = [
 
 const TitleToName: LensSource = [renameProperty("title", "name")];
 
-
 const V1Lens = {
   kind: "lens" as const,
   from: "mu",
@@ -321,7 +320,7 @@ describe("Has basic schema tools", () => {
   describe("nested objects", () => {
     const ProjectV1: LensSource = [
       addProperty({ name: "details", type: "object" }),
-      addProperty({ name: 'created_at', type: 'string'}),
+      addProperty({ name: "created_at", type: "string" }),
       inside("details", [
         addProperty({ name: "title", type: "string" }),
         addProperty({ name: "summary", type: "string" }),
@@ -332,10 +331,8 @@ describe("Has basic schema tools", () => {
       inside("details", [renameProperty("title", "name")]),
     ];
 
-    const PlungeSummary: LensSource = [ 
-      plungeProperty('details', 'created_at')
-    ]
-    
+    const PlungeSummary: LensSource = [plungeProperty("details", "created_at")];
+
     const V1Lens = {
       kind: "lens" as const,
       from: "mu",
@@ -349,13 +346,13 @@ describe("Has basic schema tools", () => {
       to: "projectv2",
       lens: ProjectV2,
     };
-        
+
     const PlungeLens = {
       kind: "lens" as const,
       from: "projectv2",
       to: "project-plunge-summary",
       lens: PlungeSummary,
-    }
+    };
 
     it("can accept a single schema and fill out default values", () => {
       const doc1 = Cambria.init({ schema: "projectv1" });
@@ -451,8 +448,8 @@ describe("Has basic schema tools", () => {
         },
       });
     });
-    
-    it.only("can plunge an object", () => {
+
+    it("can plunge an object", () => {
       const doc1 = Cambria.init({
         schema: "project-plunge-summary",
         lenses: [V1Lens, V2Lens, PlungeLens],
