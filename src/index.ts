@@ -12,6 +12,8 @@ import { v5 } from "uuid";
 
 const MAGIC_UUID = "f1bb7a0b-2d26-48ca-aaa3-92c63bbb5c50";
 
+type ObjectId = string;
+
 // This import doesn't pull in types for the Backend functions,
 // maybe because we're importing from a non-root file?
 import {
@@ -502,9 +504,10 @@ export function buildPath(op: Op, instance: Instance): string {
   return finalPath;
 }
 
-// Given a json path in a json doc, return the object ID at that path
+// Given a json path in a json doc, return the object ID at that path.
+// If the path doesn't resolve to an existing object ID, returns null
 // Todo: support lists
-function getObjId(state: any, path: string): string {
+function getObjId(state: any, path: string): ObjectId | null {
   if (path === "") return ROOT_ID;
 
   const pathSegments = path.split("/").slice(1);
@@ -514,8 +517,16 @@ function getObjId(state: any, path: string): string {
 
   for (const pathSegment of pathSegments) {
     const objectKeys = opSet.getIn(["byObject", objectId]);
-    // todo: don't just take the first one here -- pick the right one (sort by seq?)
-    objectId = objectKeys.getIn(["_keys", pathSegment, 0, "value"]);
+    // todo: the metadata for this key has an array, sometimes w/ multiple obj IDs
+    // for now we just take the first one, but maybe there's a more correct way?
+    const newObjectId = objectKeys.getIn(["_keys", pathSegment, 0, "value"]);
+
+    // Sometimes, the path we're looking for isn't in the instance, give up
+    if (newObjectId === undefined) {
+      return null;
+    }
+
+    objectId = newObjectId;
   }
 
   return objectId;

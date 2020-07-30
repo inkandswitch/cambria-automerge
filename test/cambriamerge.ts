@@ -582,8 +582,8 @@ describe("Has basic schema tools", () => {
           inside("branch1", [
             addProperty({ name: "branch2", type: "object" }),
             inside("branch2", [
-              addProperty({ name: "leaf1", type: "object" }),
-              addProperty({ name: "leaf2", type: "object" }),
+              addProperty({ name: "leaf1", type: "string" }),
+              addProperty({ name: "leaf2", type: "string" }),
             ]),
           ]),
         ],
@@ -601,9 +601,23 @@ describe("Has basic schema tools", () => {
         lenses: [deepNestingLens, hoistLens],
       });
 
-      const [doc2, patch2] = Cambria.applyChanges(doc1, [deepNestingLens]);
+      // fill in default values by applying an empty change
+      // (todo: reconsider this workflow)
+      const [doc2, patch2] = Cambria.applyChanges(doc1, []);
 
-      console.log({ patch2 });
+      // get the generated obj ID for the branch2 map from the default values,
+      // to use in the change below
+      const branch2ObjId = patch2.diffs.find(
+        (d) =>
+          d.action === "set" &&
+          d.path?.length === 1 &&
+          d.path[0] === "branch1" &&
+          d.key === "branch2" &&
+          d.link
+      );
+
+      if (!branch2ObjId)
+        throw new Error("expected to find objID for branch2 map");
 
       const [doc3, patch3] = Cambria.applyChanges(doc1, [
         {
@@ -617,8 +631,8 @@ describe("Has basic schema tools", () => {
             ops: [
               {
                 action: "set" as const,
-                obj: "", // todo: fill in object id of branch1
-                key: "title",
+                obj: branch2ObjId.obj, // todo: fill in object id of branch1
+                key: "leaf1",
                 value: "hello",
               },
             ],
@@ -631,10 +645,11 @@ describe("Has basic schema tools", () => {
       doc = Frontend.applyPatch(doc, patch3);
 
       assert.deepEqual(doc, {
-        created_at: "",
-        name: "hello",
-        details: {
-          summary: "",
+        branch1: {
+          leaf1: "hello",
+          branch2: {
+            leaf2: "",
+          },
         },
       });
     });
