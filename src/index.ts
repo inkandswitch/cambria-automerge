@@ -13,6 +13,7 @@ import { v5 } from "uuid";
 const MAGIC_UUID = "f1bb7a0b-2d26-48ca-aaa3-92c63bbb5c50";
 
 type ObjectId = string;
+type ObjectType = "list" | "object";
 
 // This import doesn't pull in types for the Backend functions,
 // maybe because we're importing from a non-root file?
@@ -59,6 +60,8 @@ export interface Instance {
 }
 
 export type CambriaBlock = AutomergeChange | RegisteredLens;
+
+type ElemCache = { [key: string]: Op };
 
 export interface RegisteredLens {
   kind: "lens";
@@ -211,22 +214,23 @@ function convertOp(
   index: number,
   from: Instance,
   to: Instance,
-  lensGraph: LensGraph
+  lensGraph: LensGraph,
+  elemCache: ElemCache
 ): Op[] {
   const op = change.ops[index];
   const lensStack = lensFromTo(lensGraph, from.schema, to.schema);
   const jsonschema7 = lensGraphSchema(lensGraph, from.schema);
-  const patch = opToPatch(op, from);
+  const patch = opToPatch(op, from, elemCache);
   const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
-
-  // todo: as an optimization, if cloudina didn't do anything (convertedPatch deepEquals patch)
-  // then we can just set convertedOps = [op]
+  // todo: optimization idea:
+  // if cloudina didn't do anything (convertedPatch deepEquals patch)
+  // then we should just be able to set convertedOps = [op]
   const convertedOps = patchToOps(convertedPatch, change, index, to);
 
   // a convenient debug print to see the pipeline:
   // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
   // console.log("\nCONVERSION PIPELINE:");
-  // console.log({ op, patch, convertedPatch, convertedOps });
+  console.log({ op, patch, convertedPatch, convertedOps });
 
   return convertedOps;
 }
@@ -274,15 +278,30 @@ function convertChange(
   from_instance = { ...from_instance };
   to_instance = { ...to_instance };
 
+  // cache array insert ops by the elem that they created
+  // (cache is change-scoped because we assume insert+set combinations are within same change)
+  const elemCache: ElemCache = {};
+
   for (let i = 0; i < block.change.ops.length; i++) {
     const op = block.change.ops[i];
-    const convertedOps = convertOp(
-      block.change,
-      i,
-      from_instance,
-      to_instance,
-      lensGraph
-    );
+    let convertedOps;
+    if (op.action === "ins") {
+      // add the elem to cache
+      elemCache[`${block.change.actor}:${op.elem}`] = op;
+
+      // we don't actually want to pass the insert op through cloudina conversion--
+      // the later set op that actually sets a value will be converted
+      convertedOps = [op];
+    } else {
+      convertedOps = convertOp(
+        block.change,
+        i,
+        from_instance,
+        to_instance,
+        lensGraph,
+        elemCache
+      );
+    }
     ops.push(...convertedOps);
     from_instance = applyOps(from_instance, [op]);
     to_instance = applyOps(to_instance, convertedOps);
@@ -382,6 +401,7 @@ function patchToOps(
 ): Op[] {
   const opCache = {};
   const pathCache = { [""]: ROOT_ID };
+  // todo: see if we can refactor to have TS tell us what's missing here
   const ops = patch
     .map((patchop, i) => {
       const acc: Op[] = [];
@@ -416,22 +436,33 @@ function patchToOps(
         throw new RangeError(`bad op type for patchop=${deepInspect(patchop)}`);
       }
 
+      // todo: in the below code, we need to resolve array indexes to element ids
+      // (maybe some of it can happen in getObjId? consider array indexes
+      // at intermediate points in the path)
       let path_parts = patchop.path.split("/");
       let key = path_parts.pop();
       let obj_path = path_parts.join("/");
 
-      const obj = getObjId(instance.state, obj_path) || pathCache[obj_path];
-      if (obj === undefined)
+      const objId = getObjId(instance.state, obj_path) || pathCache[obj_path];
+
+      if (getObjType(instance.state, objId) === "list") {
+        if (key === undefined || parseInt(key) === NaN) {
+          throw new Error(`Expected array index on path ${patchop.path}`);
+        }
+        key = findElemOfIndex(instance.state, objId, parseInt(key));
+      }
+
+      if (objId === undefined)
         throw new Error(`Could not find object with path ${obj_path}`);
 
       if (action === "link") {
-        const op = { action, obj, key, value: makeObj };
+        const op = { action, obj: objId, key, value: makeObj };
         acc.push(op);
       } else if (patchop.op === "add" || patchop.op === "replace") {
-        const op = { action, obj, key, value: patchop.value };
+        const op = { action, obj: objId, key, value: patchop.value };
         acc.push(op);
       } else {
-        const op = { action, obj, key };
+        const op = { action, obj: objId, key };
         acc.push(op);
       }
       return acc;
@@ -440,54 +471,6 @@ function patchToOps(
 
   return ops;
 }
-
-/*
-function applyPatch(
-  instance: Instance,
-  patch: CloudinaPatch,
-  incomingOpId: string
-): Op[] {
-  let { counter, actor } = parseOpId(incomingOpId);
-  return patch.map((patchop) => {
-    let action;
-    if (patchop.op === "remove") {
-      action = "del";
-    } else if (patchop.op === "add" || patchop.op === "replace") {
-      if (
-        patchop.value === null ||
-        ["string", "number", "boolean"].includes(typeof patchop.value)
-      ) {
-        action = "set";
-      } else if (Array.isArray(patchop.value)) {
-        action = "makeList";
-      } else if (
-        typeof patchop.value === "object" &&
-        Object.keys(patchop.value).length === 0
-      ) {
-        action = "makeMap";
-      } else {
-        throw new RangeError(`bad value for patchop=${deepInspect(patchop)}`);
-      }
-    } else {
-      throw new RangeError(`bad op type for patchop=${deepInspect(patchop)}`);
-    }
-    const path = patchop.path.split("/").slice(1);
-    const { obj, key } = instance.processPath(path, patchop.op === "add");
-    const insert = patchop.op === "add" && Array.isArray(instance.byObjId[obj]);
-    const opId = `${counter}@${actor}`;
-    counter += 0.1;
-    if (patchop.op === "add" || patchop.op === "replace") {
-      const op = { opId, action, obj, key, insert, value: patchop.value };
-      instance.applyOp(op); // side effect!!!
-      return op;
-    } else {
-      const op = { opId, action, obj, key, insert };
-      instance.applyOp(op); // side effect!!!
-      return op;
-    }
-  });
-}
-*/
 
 function parseOpId(opid: string): { counter: number; actor: string } {
   const regex = /^([0-9.]+)@(.*)$/;
@@ -500,13 +483,49 @@ function parseOpId(opid: string): { counter: number; actor: string } {
   return { counter, actor };
 }
 
-export function buildPath(op: Op, instance: Instance): string {
+export function buildPath(
+  op: Op,
+  instance: Instance,
+  elemCache: ElemCache
+): string {
   const backendState: any = instance.state;
   const opSet = backendState.state;
   let obj = op.obj;
   let path: string[] = getPath(instance.state, obj) || [];
-  const finalPath = "/" + [...path, op.key].join("/");
+  let key = op.key;
+  if (op.key && Object.keys(elemCache).includes(op.key)) {
+    const insertKey = elemCache[op.key].key;
+    if (insertKey === undefined) throw new Error("expected key on insert op");
+    const arrayIndex = findIndexOfElem(instance.state, obj, insertKey) + 1;
+    delete elemCache[op.key];
+    key = String(arrayIndex);
+  }
+  const finalPath = "/" + [...path, key].join("/");
   return finalPath;
+}
+
+// given an automerge instance, an array obj id, and an elem ID, return the array index
+function findIndexOfElem(
+  state: any,
+  objId: ObjectId,
+  insertKey: string
+): number {
+  if (insertKey === "_head") return -1;
+
+  // find the index of the element ID in the array
+  // note: this code not exercised yet, but hopefully roughly right
+  return state
+    .getIn(["opSet", "byObject", objId, "_elemIds"])
+    .indexOf(insertKey);
+}
+
+// given an automerge instance, an array obj id, and an index, return the elem ID
+function findElemOfIndex(state: any, objId: ObjectId, index: number): string {
+  const elemId = state.getIn(["opSet", "byObject", objId, "_elemIds"])[index];
+  if (elemId === undefined) {
+    throw new Error(`Couldn't find array index ${index} in object ${objId}`);
+  }
+  return elemId;
 }
 
 // Given a json path in a json doc, return the object ID at that path.
@@ -538,6 +557,12 @@ function getObjId(state: any, path: string): ObjectId | null {
   return objectId;
 }
 
+// given an automerge backend state and object ID, returns the type of the object
+function getObjType(state: any, objId: ObjectId): ObjectType {
+  const objType = state.getIn(["opSet", "byObject", objId, "_init", "action"]);
+  return objType === "makeList" || objType === "makeText" ? "list" : "object";
+}
+
 function getPath(state: any, obj: string): string[] | null {
   const opSet = state.get("opSet");
   let path: string[] = [];
@@ -545,9 +570,7 @@ function getPath(state: any, obj: string): string[] | null {
     const ref = opSet.getIn(["byObject", obj, "_inbound"], Set()).first();
     if (!ref) return null;
     obj = ref.get("obj");
-    const objType = opSet.getIn(["byObject", obj, "_init", "action"]);
-
-    if (objType === "makeList" || objType === "makeText") {
+    if (getObjType(state, obj) === "list") {
       const index = opSet
         .getIn(["byObject", obj, "_elemIds"])
         .indexOf(ref.get("key"));
@@ -557,28 +580,29 @@ function getPath(state: any, obj: string): string[] | null {
       path.unshift(ref.get("key"));
     }
   }
+
   return path;
 }
 
-export function opToPatch(op: Op, instance: Instance): CloudinaPatch {
+export function opToPatch(
+  op: Op,
+  instance: Instance,
+  elemCache: ElemCache
+): CloudinaPatch {
   switch (op.action) {
     case "set": {
-      const path = buildPath(op, instance);
+      const path = buildPath(op, instance, elemCache);
       const { value } = op;
       const action = "replace";
       return [{ op: action, path, value }];
     }
-    case "ins": {
-      const path = buildPath(op, instance);
-      const { value } = op;
-      const action = "add";
-      return [{ op: action, path, value }];
-    }
     case "del": {
-      const path = buildPath(op, instance);
+      const path = buildPath(op, instance, elemCache);
       return [{ op: "remove", path }];
     }
     default:
+      // note: inserts in Automerge 0 don't produce a patch, so we don't have a case for them here.
+      // (we swallow them earlier in the process)
       throw new RangeError(`unsupported op ${deepInspect(op)}`);
   }
 }

@@ -723,6 +723,11 @@ describe("Has basic schema tools", () => {
         },
       });
     });
+
+    // todo: test other ops inside changes, besides just set
+    // use makeMap and link to create a new object in the change
+
+    // todo: when we remove an obj property, make sure to swallow makemap + link ops
   });
 
   describe("arrays", () => {
@@ -753,7 +758,7 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    it("can read and write to an array with no lens conversion", () => {
+    it("can write and read to an array with no lens conversion", () => {
       const doc1 = Cambria.init({
         schema: "array-v1",
         lenses: [arrayV1Lens],
@@ -796,6 +801,83 @@ describe("Has basic schema tools", () => {
         tags: ["bug"],
       });
     });
+
+    it.only("can write and read with an unrelated lens conversion", () => {
+      // this lens has nothing to do with arrays but still pushes the patch thru cloudina
+      const arrayV2Lens = {
+        kind: "lens" as const,
+        from: "array-v1",
+        to: "array-v2",
+        lens: [addProperty({ name: "other", type: "string" })],
+      };
+
+      const doc1 = Cambria.init({
+        schema: "array-v2",
+        lenses: [arrayV1Lens, arrayV2Lens],
+      });
+
+      const [doc2, patch2] = Cambria.applyChanges(doc1, []);
+
+      const arrayObjId = patch2.diffs[0].obj;
+
+      const [doc3, patch3] = Cambria.applyChanges(doc1, [
+        {
+          kind: "change" as const,
+          schema: "array-v1",
+          change: {
+            message: "",
+            actor: ACTOR_ID_1,
+            seq: 1,
+            deps: { "0000000000": 1 },
+            ops: [
+              // insert "feature" at the beginning
+              { action: "ins", obj: arrayObjId, key: "_head", elem: 1 },
+              {
+                action: "set",
+                obj: arrayObjId,
+                key: `${ACTOR_ID_1}:1`,
+                value: "feature",
+              },
+
+              // insert "bug" as the second element
+              {
+                action: "ins",
+                obj: arrayObjId,
+                key: `${ACTOR_ID_1}:1`,
+                elem: 2,
+              },
+              {
+                action: "set",
+                obj: arrayObjId,
+                key: `${ACTOR_ID_1}:2`,
+                value: "bug",
+              },
+              {
+                action: "set",
+                obj: arrayObjId,
+                key: `${ACTOR_ID_1}:2`,
+                value: "defect",
+              },
+            ],
+          },
+        },
+      ]);
+
+      let doc = Frontend.init();
+      doc = Frontend.applyPatch(doc, patch2);
+      doc = Frontend.applyPatch(doc, patch3);
+
+      assert.deepEqual(doc, {
+        tags: ["feature", "defect"],
+        other: "",
+      });
+    });
+
+    // todo: insert an object into an array (not implemented yet)
+    // (we have unimplemented paths on sending in make ops)
+
+    // notes from orion:
+    // -getPath needs to do this too
   });
 
   // lists
