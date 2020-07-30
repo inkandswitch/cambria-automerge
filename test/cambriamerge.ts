@@ -572,7 +572,7 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    it.only("can hoist a property from 2 levels deep", () => {
+    it("can hoist a property from 2 levels deep", () => {
       const deepNestingLens = {
         kind: "lens" as const,
         from: "mu",
@@ -655,10 +655,85 @@ describe("Has basic schema tools", () => {
     });
   });
 
-  // nested objects
-  // no lens at all
-  // - rename in object
-  // - hoist/plunge
+  describe("arrays", () => {
+    const arrayV1Lens = {
+      kind: "lens" as const,
+      from: "mu",
+      to: "array-v1",
+      lens: [
+        addProperty({ name: "tags", type: "array", arrayItemType: "string" }),
+      ],
+    };
+
+    it("can accept a single schema and fill out default values", () => {
+      const doc1 = Cambria.init({
+        schema: "array-v1",
+        lenses: [arrayV1Lens],
+      });
+
+      // fill in default values by applying an empty change
+      // (todo: reconsider this workflow)
+      const [doc2, patch2] = Cambria.applyChanges(doc1, []);
+
+      let doc = Frontend.init();
+      doc = Frontend.applyPatch(doc, patch2);
+
+      assert.deepEqual(doc, {
+        tags: [],
+      });
+    });
+
+    it("can read and write to an array with no lens conversion", () => {
+      const doc1 = Cambria.init({
+        schema: "array-v1",
+        lenses: [arrayV1Lens],
+      });
+
+      // fill in default values by applying an empty change
+      // (todo: reconsider this workflow)
+      const [doc2, patch2] = Cambria.applyChanges(doc1, []);
+
+      const arrayObjId = patch2.diffs[0].obj;
+
+      const [doc3, patch3] = Cambria.applyChanges(doc1, [
+        {
+          kind: "change" as const,
+          schema: "array-v1",
+          change: {
+            message: "",
+            actor: ACTOR_ID_1,
+            seq: 1,
+            deps: { "0000000000": 1 },
+            ops: [
+              // insert a new element with the value "bug" (two ops in automerge 0)
+              { action: "ins", obj: arrayObjId, key: "_head", elem: 1 },
+              {
+                action: "set",
+                obj: arrayObjId,
+                key: `${ACTOR_ID_1}:1`,
+                value: "bug",
+              },
+            ],
+          },
+        },
+      ]);
+
+      let doc = Frontend.init();
+      doc = Frontend.applyPatch(doc, patch2);
+      doc = Frontend.applyPatch(doc, patch3);
+
+      assert.deepEqual(doc, {
+        tags: ["bug"],
+      });
+    });
+  });
 
   // lists
+  // - default values
+  // - no lens
+  // - simple lens
+  // - obj in array: default values, renaming, etc
+  // - head/wrap
+
+  // - obj in array in obj...
 });

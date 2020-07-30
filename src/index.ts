@@ -218,12 +218,15 @@ function convertOp(
   const jsonschema7 = lensGraphSchema(lensGraph, from.schema);
   const patch = opToPatch(op, from);
   const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
+
+  // todo: as an optimization, if cloudina didn't do anything (convertedPatch deepEquals patch)
+  // then we can just set convertedOps = [op]
   const convertedOps = patchToOps(convertedPatch, change, index, to);
 
   // a convenient debug print to see the pipeline:
   // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
-  console.log("\nCONVERSION PIPELINE:");
-  console.log({ op, patch, convertedPatch, convertedOps });
+  // console.log("\nCONVERSION PIPELINE:");
+  // console.log({ op, patch, convertedPatch, convertedOps });
 
   return convertedOps;
 }
@@ -396,7 +399,9 @@ function patchToOps(
         ) {
           action = "set";
         } else if (Array.isArray(patchop.value)) {
-          action = "makeList";
+          action = "link";
+          acc.push({ action: "makeList", obj: makeObj });
+          pathCache[patchop.path] = makeObj;
         } else if (
           typeof patchop.value === "object" &&
           Object.keys(patchop.value).length === 0
@@ -588,19 +593,6 @@ function calcDeps(change: Change, deps: Clock): Clock {
   newDeps[change.actor] = change.seq;
   return newDeps;
 }
-
-// function lessOrEqual(clock1, clock2): boolean {
-//   return Object.keys(clock1)
-//     .concat(Object.keys(clock2))
-//     .reduce(
-//       (result, key) => result && (clock1[key] || 0) <= (clock2[key] || 0),
-//       true
-//     );
-// }
-
-// function clockEquals(clock1, clock2): boolean {
-//   return lessOrEqual(clock1, clock2) && lessOrEqual(clock2, clock1);
-// }
 
 function applyChangesToInstance(
   instance: Instance,
