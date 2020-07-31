@@ -666,11 +666,9 @@ describe('Has basic schema tools', () => {
 
       // fill in default values by applying an empty change
       // (todo: reconsider this workflow)
-      const [, patch2] = Cambria.applyChanges(doc1, [])
+      const [doc2] = Cambria.applyChanges(doc1, [])
 
-      let doc = Frontend.init()
-      doc = Frontend.applyPatch(doc, patch2)
-
+      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc2))
       assert.deepEqual(doc, {
         tags: [],
       })
@@ -681,25 +679,17 @@ describe('Has basic schema tools', () => {
         schema: 'array-v1',
         lenses: [ARRAY_V1_LENS_CHANGE],
       })
+      const changeMaker = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc1))
 
-      // fill in default values by applying an empty change
-      const [, initialPatch] = Cambria.applyChanges(doc1, [])
-
-      // fill in default values by applying a patch full of defaults
-      const changeMaker = Frontend.applyPatch(Frontend.init(), initialPatch)
       const [, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
         doc.tags.push('fun')
         doc.tags.push('relaxing')
         doc.tags.push('lovecraftian')
       })
 
-      const [, arrayPatch] = Cambria.applyChanges(doc1, [
-        { schema: 'array-v1', change, lenses: [] },
-      ])
+      const [doc2] = Cambria.applyChanges(doc1, [{ schema: 'array-v1', change, lenses: [] }])
 
-      let doc = Frontend.applyPatch(Frontend.init(), initialPatch)
-      doc = Frontend.applyPatch(doc, arrayPatch)
-
+      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc2))
       assert.deepEqual(doc, {
         tags: ['fun', 'relaxing', 'lovecraftian'],
       })
@@ -710,23 +700,15 @@ describe('Has basic schema tools', () => {
         schema: 'array-v1',
         lenses: [ARRAY_V1_LENS_CHANGE],
       })
+      const changeMaker = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc1))
 
-      // fill in default values by applying an empty change
-      const [, initialPatch] = Cambria.applyChanges(doc1, [])
-
-      // fill in default values by applying a patch full of defaults
-      const changeMaker = Frontend.applyPatch(Frontend.init(), initialPatch)
       const [, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
         doc.tags = ['maddening', 'infuriating', 'adorable']
       })
 
-      const [, arrayPatch] = Cambria.applyChanges(doc1, [
-        { schema: 'array-v1', change, lenses: [] },
-      ])
+      const [doc2] = Cambria.applyChanges(doc1, [{ schema: 'array-v1', change, lenses: [] }])
 
-      let doc = Frontend.applyPatch(Frontend.init(), initialPatch)
-      doc = Frontend.applyPatch(doc, arrayPatch)
-
+      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc2))
       assert.deepEqual(doc, {
         tags: ['maddening', 'infuriating', 'adorable'],
       })
@@ -737,22 +719,16 @@ describe('Has basic schema tools', () => {
         schema: 'array-v1',
         lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
       })
+      const changeMaker = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc1))
 
-      // fill in default values by applying an empty change
-      const [, initialPatch] = Cambria.applyChanges(doc1, [])
-
-      // fill in default values by applying a patch full of defaults
-      const changeMaker = Frontend.applyPatch(Frontend.init(), initialPatch)
       const [, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
         doc.tags = ['maddening', 'infuriating', 'adorable']
         doc.tags[1] = 'excruciating'
       })
 
-      const [, arrayPatch] = Cambria.applyLocalChange(doc1, change)
+      const [doc2] = Cambria.applyLocalChange(doc1, change)
 
-      let doc = Frontend.applyPatch(Frontend.init(), initialPatch)
-      doc = Frontend.applyPatch(doc, arrayPatch)
-
+      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc2))
       assert.deepEqual(doc, {
         tags: ['maddening', 'excruciating', 'adorable'],
       })
@@ -764,12 +740,8 @@ describe('Has basic schema tools', () => {
         schema: 'array-v1',
         lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
       })
+      const changeMaker = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc1))
 
-      // fill in default values by applying an empty change
-      const initialPatch = Cambria.getPatch(doc1)
-
-      // fill in default values by applying a patch full of defaults
-      const changeMaker = Frontend.applyPatch(Frontend.init(), initialPatch)
       const [docWithArrays, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
         doc.tags = ['maddening', 'infuriating', 'adorable']
       })
@@ -777,13 +749,10 @@ describe('Has basic schema tools', () => {
         delete doc.tags[1]
       })
 
-      const [doc2, arrayPatch] = Cambria.applyLocalChange(doc1, change)
-      const [, delPatch] = Cambria.applyLocalChange(doc2, delChange)
+      const [doc2] = Cambria.applyLocalChange(doc1, change)
+      const [doc3] = Cambria.applyLocalChange(doc2, delChange)
 
-      let doc = Frontend.applyPatch(Frontend.init(), initialPatch)
-      doc = Frontend.applyPatch(doc, arrayPatch)
-      doc = Frontend.applyPatch(doc, delPatch)
-
+      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc3))
       assert.deepEqual(doc, {
         tags: ['maddening', 'adorable'],
       })
