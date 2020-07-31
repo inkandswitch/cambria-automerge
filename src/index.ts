@@ -89,9 +89,9 @@ export function applyChanges(
 export function applyLocalChange(
   doc: CambriaBackend,
   request: Change
-): [CambriaBackend, AutomergePatch] {
-  const [patch] = doc.applyLocalChange(request)
-  return [doc, patch]
+): [CambriaBackend, AutomergePatch, CambriaBlock ] {
+  const [patch, block] = doc.applyLocalChange(request)
+  return [doc, patch, block]
 }
 
 export function getPatch(doc: CambriaBackend): AutomergePatch {
