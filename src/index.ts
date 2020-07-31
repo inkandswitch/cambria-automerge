@@ -209,23 +209,20 @@ function convertOp(
   elemCache: ElemCache
 ): Op[] {
   const op = change.ops[index]
-  // console.log("\n convertOp pipeline:");
-  // console.log({ from: from.schema, to: to.schema, op });
+  console.log('\n convertOp pipeline:')
+  console.log({ from: from.schema, to: to.schema, op })
   const lensStack = lensFromTo(lensState.graph, from.schema, to.schema)
   const jsonschema7 = lensGraphSchema(lensState.graph, from.schema)
   const patch = opToPatch(op, from, elemCache)
-  // console.log({ patch });
+  console.log({ patch })
   const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7)
-  // console.log({ convertedPatch });
+  console.log({ convertedPatch })
   // todo: optimization idea:
   // if cloudina didn't do anything (convertedPatch deepEquals patch)
   // then we should just be able to set convertedOps = [op]
 
   const convertedOps = patchToOps(convertedPatch, change, index, to)
-  // console.log({ convertedOps });
-
-  // a convenient debug print to see the pipeline:
-  // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
+  console.log({ convertedOps })
 
   return convertedOps
 }

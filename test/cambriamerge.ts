@@ -702,19 +702,58 @@ describe('Has basic schema tools', () => {
       })
       const changeMaker = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria))
 
-      const [, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
+      const [initialDoc, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
         doc.tags.push('maddening')
         doc.tags.push('infuriating')
         doc.tags.push('adorable')
+      })
+      console.log('first change from frontend', deepInspect(change))
+      const [, overwriteChange] = Frontend.change<unknown, ArrayTestDoc>(initialDoc, (doc) => {
         doc.tags[1] = 'excruciating'
       })
+      console.log('second change from frontend', deepInspect(overwriteChange))
 
+      // this is all wrong now!!! isn't lensing
       const [cambria2] = Cambria.applyLocalChange(cambria, change)
+      const [cambria3] = Cambria.applyLocalChange(cambria, overwriteChange)
 
-      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria2))
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria3))
       assert.deepEqual(frontend, {
         other: '',
         tags: ['maddening', 'excruciating', 'adorable'],
+      })
+    })
+
+    it('can insert/replace array elements in a single change', () => {
+      const doc1 = Cambria.init({
+        schema: 'array-v2',
+        lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
+      })
+
+      // fill in default values by applying an empty change
+      const [, initialPatch] = Cambria.applyChanges(doc1, [])
+
+      // fill in default values by applying a patch full of defaults
+      const changeMaker = Frontend.applyPatch(Frontend.init(), initialPatch)
+      const [, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
+        doc.tags.push('el0')
+        doc.tags.push('el1')
+        doc.tags.push('el2')
+        doc.tags[1] = 'new1'
+      })
+
+      console.log('change from frontend', deepInspect(change))
+
+      const [, arrayPatch] = Cambria.applyChanges(doc1, [
+        { schema: 'array-v1', change, lenses: [] },
+      ])
+
+      let doc = Frontend.applyPatch(Frontend.init(), initialPatch)
+      doc = Frontend.applyPatch(doc, arrayPatch)
+
+      assert.deepEqual(doc, {
+        other: '',
+        tags: ['el0', 'new1', 'el2'],
       })
     })
 
