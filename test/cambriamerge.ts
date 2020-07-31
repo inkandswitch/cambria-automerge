@@ -318,9 +318,9 @@ describe('Has basic schema tools', () => {
         Cambria.init({ schema: LAST_SCHEMA, lenses: AllLensChanges }),
         []
       )
-      const doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
 
-      assert.deepEqual(doc, {
+      const frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
+      assert.deepEqual(frontend, {
         summary: '',
         title: '',
         details: {
@@ -434,8 +434,8 @@ describe('Has basic schema tools', () => {
         },
       ])
 
-      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
-      assert.deepEqual(doc, {
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
+      assert.deepEqual(frontend, {
         title: '',
         summary: '',
         details: {
@@ -479,8 +479,8 @@ describe('Has basic schema tools', () => {
         },
       ])
 
-      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
-      assert.deepEqual(doc, {
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
+      assert.deepEqual(frontend, {
         name: '',
         summary: '',
         details: {
@@ -525,8 +525,8 @@ describe('Has basic schema tools', () => {
         },
       ])
 
-      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalCambria))
-      assert.deepEqual(doc, {
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalCambria))
+      assert.deepEqual(frontend, {
         name: '',
         summary: '',
         author: 'Steven King',
@@ -602,8 +602,8 @@ describe('Has basic schema tools', () => {
         },
       ])
 
-      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
-      assert.deepEqual(doc, {
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
+      assert.deepEqual(frontend, {
         branch1: {
           leaf1: 'hello',
           branch2: {
@@ -641,13 +641,8 @@ describe('Has basic schema tools', () => {
         schema: 'array-v1',
         lenses: [ARRAY_V1_LENS_CHANGE],
       })
-
-      // fill in default values by applying an empty change
-      // (todo: reconsider this workflow)
-      const [doc2] = Cambria.applyChanges(doc1, [])
-
-      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc2))
-      assert.deepEqual(doc, {
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc1))
+      assert.deepEqual(frontend, {
         tags: [],
       })
     })
@@ -667,8 +662,8 @@ describe('Has basic schema tools', () => {
 
       const [doc2] = Cambria.applyChanges(doc1, [{ schema: 'array-v1', change, lenses: [] }])
 
-      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc2))
-      assert.deepEqual(doc, {
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc2))
+      assert.deepEqual(frontend, {
         tags: ['fun', 'relaxing', 'lovecraftian'],
       })
     })
@@ -686,8 +681,8 @@ describe('Has basic schema tools', () => {
 
       const [doc2] = Cambria.applyChanges(doc1, [{ schema: 'array-v1', change, lenses: [] }])
 
-      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc2))
-      assert.deepEqual(doc, {
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc2))
+      assert.deepEqual(frontend, {
         tags: ['maddening', 'infuriating', 'adorable'],
       })
     })
@@ -706,8 +701,8 @@ describe('Has basic schema tools', () => {
 
       const [doc2] = Cambria.applyLocalChange(doc1, change)
 
-      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc2))
-      assert.deepEqual(doc, {
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc2))
+      assert.deepEqual(frontend, {
         tags: ['maddening', 'excruciating', 'adorable'],
       })
     })
@@ -730,8 +725,8 @@ describe('Has basic schema tools', () => {
       const [doc2] = Cambria.applyLocalChange(doc1, change)
       const [doc3] = Cambria.applyLocalChange(doc2, delChange)
 
-      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc3))
-      assert.deepEqual(doc, {
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(doc3))
+      assert.deepEqual(frontend, {
         tags: ['maddening', 'adorable'],
       })
     })
