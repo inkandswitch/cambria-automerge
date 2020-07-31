@@ -697,7 +697,7 @@ describe('Has basic schema tools', () => {
 
     it('can insert/replace array elements w/ an unrelated lens conversion', () => {
       const cambria = Cambria.init({
-        schema: 'array-v2',
+        schema: 'array-v1',
         lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
       })
       const changeMaker = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria))
@@ -714,10 +714,20 @@ describe('Has basic schema tools', () => {
       console.log('second change from frontend', deepInspect(overwriteChange))
 
       // this is all wrong now!!! isn't lensing
-      const [cambria2] = Cambria.applyLocalChange(cambria, change)
-      const [cambria3] = Cambria.applyLocalChange(cambria, overwriteChange)
+      const [cambria2, , block2] = Cambria.applyLocalChange(cambria, change)
+      const [cambria3, , block3] = Cambria.applyLocalChange(cambria2, overwriteChange)
 
-      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria3))
+      const v2state1 = Cambria.init({
+        schema: 'array-v2',
+        lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
+      })
+
+      Cambria.getPatch(v2state1)
+
+      // this fails becuase we don't carry our incremental op instances across blocks
+      const [v2state2] = Cambria.applyChanges(v2state1, [block2, block3])
+
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(v2state2))
       assert.deepEqual(frontend, {
         other: '',
         tags: ['maddening', 'excruciating', 'adorable'],
