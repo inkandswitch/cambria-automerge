@@ -16,8 +16,8 @@ const AUTOMERGE_ROOT_ID = "00000000-0000-0000-0000-000000000000";
 
 const InitialProjectLens: LensSource = [
   addProperty({ name: "name", type: "string" }),
-  addProperty({ name: "summary", type: "string" })
-]
+  addProperty({ name: "summary", type: "string" }),
+];
 
 const FillOutProjectLens: LensSource = [
   addProperty({ name: "created_at", type: "string" }),
@@ -29,25 +29,31 @@ const FillOutProjectLens: LensSource = [
 ];
 
 const RenameLens: LensSource = [renameProperty("name", "title")];
-const PlungeIntoDetailsLens: LensSource = [plungeProperty("details", "created_at")]
-const RenameNestedLens: LensSource = [inside("details", [ renameProperty("date", "updated_at")])]
+const PlungeIntoDetailsLens: LensSource = [
+  plungeProperty("details", "created_at"),
+];
+const RenameNestedLens: LensSource = [
+  inside("details", [renameProperty("date", "updated_at")]),
+];
 
 // use these to just get a stack of all the lenses we have
 const AllLenses: LensSource[] = [
-  InitialProjectLens, 
-  FillOutProjectLens, 
+  InitialProjectLens,
+  FillOutProjectLens,
   RenameLens,
   PlungeIntoDetailsLens,
-  RenameNestedLens
-]
+  RenameNestedLens,
+];
 
-const AllLensChanges: Cambria.RegisteredLens[] = AllLenses.map((current, currentIndex) => ({
-  kind: "lens" as const,
-  from: (currentIndex === 0) ? "mu" : "project-v" + currentIndex,
-  to: "project-v" + (currentIndex + 1),
-  lens: current
-}))
-const LAST_SCHEMA = AllLensChanges[AllLensChanges.length-1].to
+const AllLensChanges: Cambria.RegisteredLens[] = AllLenses.map(
+  (current, currentIndex) => ({
+    kind: "lens" as const,
+    from: currentIndex === 0 ? "mu" : "project-v" + currentIndex,
+    to: "project-v" + (currentIndex + 1),
+    lens: current,
+  })
+);
+const LAST_SCHEMA = AllLensChanges[AllLensChanges.length - 1].to;
 
 // Use these when you need less
 const InitialLensChange = {
@@ -61,8 +67,8 @@ const FillOutProjectLensChange = {
   kind: "lens" as const,
   from: "project-v1",
   to: "project-filled-out",
-  lens: FillOutProjectLens
-}
+  lens: FillOutProjectLens,
+};
 
 const RenameLensChange = {
   kind: "lens" as const,
@@ -75,8 +81,14 @@ function deepInspect(object: any) {
   return inspect(object, false, null, true);
 }
 
-const [v1Cambria, v1InitialPatch] = Cambria.applyChanges(Cambria.init({ schema: "project-v1" }), [InitialLensChange])
-const v1Frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), v1InitialPatch)
+const [v1Cambria, v1InitialPatch] = Cambria.applyChanges(
+  Cambria.init({ schema: "project-v1" }),
+  [InitialLensChange]
+);
+const v1Frontend = Frontend.applyPatch(
+  Frontend.init(ACTOR_ID_1),
+  v1InitialPatch
+);
 
 describe("Has basic schema tools", () => {
   it("can accept a single schema and fill out default values", () => {
@@ -101,12 +113,14 @@ describe("Has basic schema tools", () => {
   });
 
   it("can accept a real change", () => {
-    const [newFrontend, change] = Frontend.change(v1Frontend, (doc: any) => { doc.title = "hello" })
+    const [newFrontend, change] = Frontend.change(v1Frontend, (doc: any) => {
+      doc.title = "hello";
+    });
     const cambriaChange = {
-      kind: 'change' as const,
-      schema: 'project-v1',
-      change
-    }
+      kind: "change" as const,
+      schema: "project-v1",
+      change,
+    };
     const [, patch] = Cambria.applyChanges(v1Cambria, [cambriaChange]);
 
     assert.deepEqual(patch.diffs, [
@@ -123,17 +137,25 @@ describe("Has basic schema tools", () => {
 
   // XXX: i'm testing... something here. it's not really clear to me why, though.
   it("can accept a real change with its lens", () => {
-    const doc1 = Cambria.init({ schema: "project-rename", lenses: [InitialLensChange]});
+    const doc1 = Cambria.init({
+      schema: "project-rename",
+      lenses: [InitialLensChange],
+    });
 
     // this is cheating... i know the property will be called title post-lens application
-    const v2Frontend = v1Frontend
-    const [newFrontend, change] = Frontend.change(v2Frontend, (doc: any) => { doc.title = "hello" })
+    const v2Frontend = v1Frontend;
+    const [newFrontend, change] = Frontend.change(v2Frontend, (doc: any) => {
+      doc.title = "hello";
+    });
     const cambriaChange = {
-      kind: 'change' as const,
-      schema: 'project-rename',
-      change
-    }
-    const [doc2, patch2] = Cambria.applyChanges(doc1, [RenameLensChange, cambriaChange]);
+      kind: "change" as const,
+      schema: "project-rename",
+      change,
+    };
+    const [doc2, patch2] = Cambria.applyChanges(doc1, [
+      RenameLensChange,
+      cambriaChange,
+    ]);
 
     assert.deepEqual(patch2.diffs, [
       {
@@ -164,28 +186,37 @@ describe("Has basic schema tools", () => {
   });
 
   it("converts a doc from v1 to v2", () => {
-
-    const [newFrontend, change] = Frontend.change(v1Frontend, (doc: any) => { doc.name = "hello" })
+    const [newFrontend, change] = Frontend.change(v1Frontend, (doc: any) => {
+      doc.name = "hello";
+    });
     const cambriaChange = {
-      kind: 'change' as const,
-      schema: 'project-v1',
-      change
-    }
+      kind: "change" as const,
+      schema: "project-v1",
+      change,
+    };
 
-    
-    const [cambria, initialPatch] = Cambria.applyChanges(Cambria.init({ schema: LAST_SCHEMA }), AllLensChanges)
-    const frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
+    const [cambria, initialPatch] = Cambria.applyChanges(
+      Cambria.init({ schema: LAST_SCHEMA }),
+      AllLensChanges
+    );
+    const frontend = Frontend.applyPatch(
+      Frontend.init(ACTOR_ID_1),
+      initialPatch
+    );
 
-    const [v1PatchedBackend, convertedV1Patch] = Cambria.applyChanges(cambria, [RenameLensChange, cambriaChange]);
+    const [v1PatchedBackend, convertedV1Patch] = Cambria.applyChanges(cambria, [
+      RenameLensChange,
+      cambriaChange,
+    ]);
 
-    const finalFrontend = Frontend.applyPatch(frontend, convertedV1Patch)
+    const finalFrontend = Frontend.applyPatch(frontend, convertedV1Patch);
     assert.deepEqual(finalFrontend, {
       title: "hello",
       summary: "",
       details: {
-        author: '',
-        created_at: '',
-        updated_at: ''
+        author: "",
+        created_at: "",
+        updated_at: "",
       },
     });
   });
@@ -193,17 +224,23 @@ describe("Has basic schema tools", () => {
   it.skip("can handle writes from v1 and v2", () => {
     const state1 = Cambria.init({ schema: "project-v1" });
 
-    const [, nameChange] = Frontend.change(v1Frontend, (doc: any) => { doc.name = "hello" })
-    const [, filloutChange] = Frontend.change(v1Frontend, (doc: any) => { 
-      doc.details = {}
-      doc.details.author = "Peter" }
-    )
-    
+    const [, nameChange] = Frontend.change(v1Frontend, (doc: any) => {
+      doc.name = "hello";
+    });
+    const [, filloutChange] = Frontend.change(v1Frontend, (doc: any) => {
+      doc.details = {};
+      doc.details.author = "Peter";
+    });
+
     const [state2, patch2] = Cambria.applyChanges(state1, [
       InitialLensChange,
-      { kind: "change", "schema": InitialLensChange.to, change: nameChange },
+      { kind: "change", schema: InitialLensChange.to, change: nameChange },
       FillOutProjectLensChange,
-      { kind: "change", "schema": FillOutProjectLensChange.to, change: filloutChange },
+      {
+        kind: "change",
+        schema: FillOutProjectLensChange.to,
+        change: filloutChange,
+      },
     ]);
 
     let doc = Frontend.init();
@@ -215,19 +252,27 @@ describe("Has basic schema tools", () => {
     });
   });
 
-  
   it("can handle writes from v1 and v2 when lenses are in memory, not in doc", () => {
-    const state1 = Cambria.init({ schema: "project-v5", lenses: AllLensChanges });
+    const state1 = Cambria.init({
+      schema: "project-v5",
+      lenses: AllLensChanges,
+    });
 
-    const [frontEnd, nameChange] = Frontend.change(v1Frontend, (doc: any) => { doc.name = "hello" })
-    const [, filloutChange] = Frontend.change(frontEnd, (doc: any) => { 
-      doc.details = {}
-      doc.details.author = "Peter" }
-    )
+    const [frontEnd, nameChange] = Frontend.change(v1Frontend, (doc: any) => {
+      doc.name = "hello";
+    });
+    const [, filloutChange] = Frontend.change(frontEnd, (doc: any) => {
+      doc.details = {};
+      doc.details.author = "Peter";
+    });
 
     const [state2, patch2] = Cambria.applyChanges(state1, [
-      { kind: "change", "schema": InitialLensChange.to, change: nameChange },
-      { kind: "change", "schema": AllLensChanges.slice(-1)[0].to, change: filloutChange },
+      { kind: "change", schema: InitialLensChange.to, change: nameChange },
+      {
+        kind: "change",
+        schema: AllLensChanges.slice(-1)[0].to,
+        change: filloutChange,
+      },
     ]);
 
     let doc = Frontend.init();
@@ -236,24 +281,30 @@ describe("Has basic schema tools", () => {
     assert.deepEqual(doc, {
       title: "hello",
       summary: "",
-      details: { "author": "Peter" }
+      details: { author: "Peter" },
     });
   });
 
   it.skip("can convert data when necessary lens comes after the write", () => {
     const state1 = Cambria.init({ schema: "project-filled-out" });
 
-    const [, nameChange] = Frontend.change(v1Frontend, (doc: any) => { doc.name = "hello" })
-    const [, filloutChange] = Frontend.change(v1Frontend, (doc: any) => { 
-      doc.details = {}
-      doc.details.author = "Peter" }
-    )
-    
+    const [, nameChange] = Frontend.change(v1Frontend, (doc: any) => {
+      doc.name = "hello";
+    });
+    const [, filloutChange] = Frontend.change(v1Frontend, (doc: any) => {
+      doc.details = {};
+      doc.details.author = "Peter";
+    });
+
     const [state2, patch2] = Cambria.applyChanges(state1, [
       InitialLensChange,
-      { kind: "change", "schema": InitialLensChange.to, change: nameChange },
+      { kind: "change", schema: InitialLensChange.to, change: nameChange },
       FillOutProjectLensChange,
-      { kind: "change", "schema": FillOutProjectLensChange.to, change: filloutChange },
+      {
+        kind: "change",
+        schema: FillOutProjectLensChange.to,
+        change: filloutChange,
+      },
     ]);
 
     let doc = Frontend.init();
@@ -266,7 +317,9 @@ describe("Has basic schema tools", () => {
   });
 
   describe("removeProperty lens", () => {
-    const RemoveLens: LensSource = [removeProperty({name: "name", type: "string"})];
+    const RemoveLens: LensSource = [
+      removeProperty({ name: "name", type: "string" }),
+    ];
     const RemoveLensChange = {
       kind: "lens" as const,
       from: "project-v1",
@@ -276,15 +329,16 @@ describe("Has basic schema tools", () => {
     it("can convert with a removeProperty lens", () => {
       const removeCambria = Cambria.init({
         schema: RemoveLensChange.to,
-        lenses: [
-          InitialLensChange,
-          RemoveLensChange
-        ],
+        lenses: [InitialLensChange, RemoveLensChange],
       });
 
       // V1 writes to the title property, which should become a no-op
-      const [, nameChange] = Frontend.change(v1Frontend, (doc: any) => { doc.name = "hello" })
-      const [, noOpPatch] = Cambria.applyChanges(removeCambria, [{ kind: "change", "schema": InitialLensChange.to, change: nameChange },]);
+      const [, nameChange] = Frontend.change(v1Frontend, (doc: any) => {
+        doc.name = "hello";
+      });
+      const [, noOpPatch] = Cambria.applyChanges(removeCambria, [
+        { kind: "change", schema: InitialLensChange.to, change: nameChange },
+      ]);
 
       let doc = Frontend.init();
       doc = Frontend.applyPatch(doc, noOpPatch);
@@ -293,99 +347,129 @@ describe("Has basic schema tools", () => {
         summary: "",
       });
     });
-
   });
 
   describe("nested objects", () => {
     it("can accept a single schema and fill out default values", () => {
-      const [, initialPatch] = Cambria.applyChanges(Cambria.init({ schema: LAST_SCHEMA }), AllLensChanges)
-      const doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
-  
+      const [, initialPatch] = Cambria.applyChanges(
+        Cambria.init({ schema: LAST_SCHEMA }),
+        AllLensChanges
+      );
+      const doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch);
+
       assert.deepEqual(doc, {
         summary: "",
         title: "",
         details: {
-          author: '',
+          author: "",
           created_at: "",
           updated_at: "",
         },
       });
     });
 
-    it.skip("can accept a real change", () => {      
-      const [cambria, initialPatch] = Cambria.applyChanges(Cambria.init({ schema: LAST_SCHEMA }), AllLensChanges)
-      const frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
+    it.skip("can accept a real change", () => {
+      const [cambria, initialPatch] = Cambria.applyChanges(
+        Cambria.init({ schema: LAST_SCHEMA }),
+        AllLensChanges
+      );
+      const frontend = Frontend.applyPatch(
+        Frontend.init(ACTOR_ID_1),
+        initialPatch
+      );
 
-      const [, filledOutInitialPatch] = Cambria.applyChanges(Cambria.init({ schema: "project-v2" }), AllLensChanges)
-      const filledOutFrontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), filledOutInitialPatch)
+      const [, filledOutInitialPatch] = Cambria.applyChanges(
+        Cambria.init({ schema: "project-v2" }),
+        AllLensChanges
+      );
+      const filledOutFrontend = Frontend.applyPatch(
+        Frontend.init(ACTOR_ID_1),
+        filledOutInitialPatch
+      );
 
-      const [, change] = Frontend.change(filledOutFrontend, (doc: any) => { 
-        doc.details.author = 'Klaus' 
-      })
+      const [, change] = Frontend.change(filledOutFrontend, (doc: any) => {
+        doc.details.author = "Klaus";
+      });
 
       // wrap that change in Cambria details
       const [, editPatch] = Cambria.applyChanges(cambria, [
         {
           kind: "change" as const,
           schema: "project-v2",
-          change: change
+          change: change,
         },
       ]);
 
       // confirm the resulting patch is correct!
-      const patchedFrontend = Frontend.applyPatch(frontend, editPatch)
+      const patchedFrontend = Frontend.applyPatch(frontend, editPatch);
 
       assert.deepEqual(patchedFrontend, {
         details: {
           author: "Klaus",
           created_at: "",
-          updated_at: ""
+          updated_at: "",
         },
         summary: "",
-        title: ""
+        title: "",
       });
     });
-    
+
     it("can apply a change from another V2", () => {
       // Create an old v2 format patch
-      const [, v2InitialPatch] = Cambria.applyChanges(Cambria.init({ schema: "project-v2" }), AllLensChanges)
-      const v2Frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), v2InitialPatch)
+      const [, v2InitialPatch] = Cambria.applyChanges(
+        Cambria.init({ schema: "project-v2" }),
+        AllLensChanges
+      );
+      const v2Frontend = Frontend.applyPatch(
+        Frontend.init(ACTOR_ID_1),
+        v2InitialPatch
+      );
       // Apply a V2 change to a full-fledged backend and read it successfully
-      const [, change] = Frontend.change(v2Frontend, (doc: any) => { 
-        doc.details.author = "R. van Winkel"
-      })
-
+      const [, change] = Frontend.change(v2Frontend, (doc: any) => {
+        doc.details.author = "R. van Winkel";
+      });
 
       // make a new modern Cambria and apply the patch
-      const [cambria, initialPatch] = Cambria.applyChanges(Cambria.init({ schema: LAST_SCHEMA }), AllLensChanges)
-      const initialFrontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
-      
-      const [, patch] = Cambria.applyChanges(cambria, [{
-        kind: "change" as const,
-        schema: "project-v2",
-        change: change
-      }])
-      
+      const [cambria, initialPatch] = Cambria.applyChanges(
+        Cambria.init({ schema: LAST_SCHEMA }),
+        AllLensChanges
+      );
+      const initialFrontend = Frontend.applyPatch(
+        Frontend.init(ACTOR_ID_1),
+        initialPatch
+      );
+
+      const [, patch] = Cambria.applyChanges(cambria, [
+        {
+          kind: "change" as const,
+          schema: "project-v2",
+          change: change,
+        },
+      ]);
+
       const frontend = Frontend.applyPatch(initialFrontend, patch);
-      
+
       assert.deepEqual(frontend, {
         title: "",
         summary: "",
         details: {
           author: "R. van Winkel",
           created_at: "",
-          updated_at: ""
+          updated_at: "",
         },
       });
     });
-    
+
     it.skip("should fill in default values without an explicit empty applyChanges call", () => {
       let frontendV1 = Frontend.init(ACTOR_ID_1);
       let initPatch, change;
 
       // Write a realistic V1 change.
       // establish a cambria backend with a v1 schema
-      let cambriaV1 = Cambria.init({ schema: "project-v1", lenses: [InitialLensChange] })
+      let cambriaV1 = Cambria.init({
+        schema: "project-v1",
+        lenses: [InitialLensChange],
+      });
       // the above line should probably read:
       // let [cambriaV1, initPatch] = Cambria.init({ schema: "projectv1", lenses: [InitialLensChange] })
 
@@ -404,33 +488,45 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    it("can convert a rename inside an object", () => {      
+    it("can convert a rename inside an object", () => {
       const RenameNestedLensChange = {
         kind: "lens" as const,
         from: "project-v2",
         to: "project-rename-nested",
         lens: RenameNestedLens,
-      }
+      };
 
-      const [cambria, initialPatch] = Cambria.applyChanges(Cambria.init({ schema: LAST_SCHEMA }), AllLensChanges)
-      const frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)      
+      const [cambria, initialPatch] = Cambria.applyChanges(
+        Cambria.init({ schema: LAST_SCHEMA }),
+        AllLensChanges
+      );
+      const frontend = Frontend.applyPatch(
+        Frontend.init(ACTOR_ID_1),
+        initialPatch
+      );
 
-      const [, v2InitialPatch] = Cambria.applyChanges(Cambria.init({ schema: "project-v2" }), AllLensChanges)
-      const v2Frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), v2InitialPatch)
+      const [, v2InitialPatch] = Cambria.applyChanges(
+        Cambria.init({ schema: "project-v2" }),
+        AllLensChanges
+      );
+      const v2Frontend = Frontend.applyPatch(
+        Frontend.init(ACTOR_ID_2),
+        v2InitialPatch
+      );
       // Apply a V2 change to a full-fledged backend and read it successfully
-      const [, change] = Frontend.change(v2Frontend, (doc: any) => { 
-        doc.details.date = "long long ago"
-      })
+      const [, change] = Frontend.change(v2Frontend, (doc: any) => {
+        doc.details.date = "long long ago";
+      });
 
       const [, patch] = Cambria.applyChanges(cambria, [
         {
           kind: "change" as const,
           schema: "project-v2",
-          change
+          change,
         },
       ]);
 
-      let doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)      
+      let doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch);
       doc = Frontend.applyPatch(doc, patch);
 
       assert.deepEqual(doc, {
@@ -450,30 +546,46 @@ describe("Has basic schema tools", () => {
         from: "project-filled-out",
         to: "project-plunged",
         lens: PlungeIntoDetailsLens,
-      }
-      
-      const LensChanges = [InitialLensChange, FillOutProjectLensChange, PlungeLensChange]
+      };
 
-      const [cambria, initialPatch] = Cambria.applyChanges(Cambria.init({ schema: "project-plunged" }), LensChanges)
-      const frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)      
+      const LensChanges = [
+        InitialLensChange,
+        FillOutProjectLensChange,
+        PlungeLensChange,
+      ];
 
-      const [, v2InitialPatch] = Cambria.applyChanges(Cambria.init({ schema: "project-filled-out" }), LensChanges)
-      const v2Frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), v2InitialPatch)
+      const [cambria, initialPatch] = Cambria.applyChanges(
+        Cambria.init({ schema: "project-plunged" }),
+        LensChanges
+      );
+      const frontend = Frontend.applyPatch(
+        Frontend.init(ACTOR_ID_1),
+        initialPatch
+      );
+
+      const [, v2InitialPatch] = Cambria.applyChanges(
+        Cambria.init({ schema: "project-filled-out" }),
+        LensChanges
+      );
+      const v2Frontend = Frontend.applyPatch(
+        Frontend.init(ACTOR_ID_1),
+        v2InitialPatch
+      );
 
       // Apply a V2 change to a full-fledged backend and read it successfully
-      const [, change] = Frontend.change(v2Frontend, (doc: any) => { 
-        doc.created_at = "recently"
-      })
+      const [, change] = Frontend.change(v2Frontend, (doc: any) => {
+        doc.created_at = "recently";
+      });
 
       const [, patch] = Cambria.applyChanges(cambria, [
         {
           kind: "change" as const,
           schema: "project-filled-out",
-          change
+          change,
         },
       ]);
 
-      let doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)      
+      let doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch);
       doc = Frontend.applyPatch(doc, patch);
 
       assert.deepEqual(doc, {
@@ -487,38 +599,53 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    
     it("can hoist a property", () => {
-      const HoistLens = [hoistProperty("details", "author")]
+      const HoistLens = [hoistProperty("details", "author")];
       const HoistLensChange = {
         kind: "lens" as const,
         from: "project-filled-out",
         to: "project-hoisted",
         lens: HoistLens,
-      }
-      
-      const LensChanges = [InitialLensChange, FillOutProjectLensChange, HoistLensChange]
+      };
 
-      const [cambria, initialPatch] = Cambria.applyChanges(Cambria.init({ schema: "project-hoisted" }), LensChanges)
-      const frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)      
+      const LensChanges = [
+        InitialLensChange,
+        FillOutProjectLensChange,
+        HoistLensChange,
+      ];
 
-      const [, v2InitialPatch] = Cambria.applyChanges(Cambria.init({ schema: "project-filled-out" }), LensChanges)
-      const v2Frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), v2InitialPatch)
+      const [cambria, initialPatch] = Cambria.applyChanges(
+        Cambria.init({ schema: "project-hoisted" }),
+        LensChanges
+      );
+      const frontend = Frontend.applyPatch(
+        Frontend.init(ACTOR_ID_1),
+        initialPatch
+      );
+
+      const [, v2InitialPatch] = Cambria.applyChanges(
+        Cambria.init({ schema: "project-filled-out" }),
+        LensChanges
+      );
+      const v2Frontend = Frontend.applyPatch(
+        Frontend.init(ACTOR_ID_1),
+        v2InitialPatch
+      );
 
       // Apply a V2 change to a full-fledged backend and read it successfully
-      const [, change] = Frontend.change(v2Frontend, (doc: any) => { 
-        doc.details.author = "Steven King"
-      })
+      const [, change] = Frontend.change(v2Frontend, (doc: any) => {
+        doc.details.author = "Steven King";
+      });
 
       const [, patch] = Cambria.applyChanges(cambria, [
         {
           kind: "change" as const,
           schema: "project-filled-out",
-          change
+          change,
         },
       ]);
 
-      let doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)      
+      let doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch);
       doc = Frontend.applyPatch(doc, patch);
 
       assert.deepEqual(doc, {
@@ -764,7 +891,7 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    it.only("can handle array deletes", () => {
+    it("can handle array deletes", () => {
       // this lens has nothing to do with arrays but still pushes the patch thru cloudina
       const arrayV2Lens = {
         kind: "lens" as const,

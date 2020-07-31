@@ -218,20 +218,20 @@ function convertOp(
   elemCache: ElemCache
 ): Op[] {
   const op = change.ops[index];
-  console.log("\n convertOp pipeline:");
-  console.log({ from: from.schema, to: to.schema, op });
+  // console.log("\n convertOp pipeline:");
+  // console.log({ from: from.schema, to: to.schema, op });
   const lensStack = lensFromTo(lensGraph, from.schema, to.schema);
   const jsonschema7 = lensGraphSchema(lensGraph, from.schema);
   const patch = opToPatch(op, from, elemCache);
-  console.log({ patch });
+  // console.log({ patch });
   const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
-  console.log({ convertedPatch });
+  // console.log({ convertedPatch });
   // todo: optimization idea:
   // if cloudina didn't do anything (convertedPatch deepEquals patch)
   // then we should just be able to set convertedOps = [op]
 
   const convertedOps = patchToOps(convertedPatch, change, index, to);
-  console.log({ convertedOps });
+  // console.log({ convertedOps });
 
   // a convenient debug print to see the pipeline:
   // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
@@ -372,7 +372,7 @@ function applySchemaChanges(
     instance.bootstrapped = true;
   }
 
-  console.log("about to apply the final constructed change");
+  // console.log("about to apply the final constructed change");
   const [newInstance, patch] = applyChangesToInstance(instance, changesToApply);
 
   return [newInstance, patch, lensGraph];
@@ -662,7 +662,7 @@ function applyChangesToInstance(
   instance: Instance,
   changes: Change[]
 ): [Instance, AutomergePatch] {
-  console.log(`applying changes to ${instance.schema}`, deepInspect(changes));
+  // console.log(`applying changes to ${instance.schema}`, deepInspect(changes));
   const [backendState, patch] = Backend.applyChanges(instance.state, changes);
 
   return [
