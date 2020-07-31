@@ -1,11 +1,12 @@
 {
   "name": "cambriamerge",
   "version": "0.0.1",
-  "main": "index.ts",
+  "main": "dist/index.js",
   "license": "MIT",
   "scripts": {
-    "test": "mocha -r ts-node/register test/cambriamerge.ts",
-    "build": "webpack"
+    "build": "tsc --outDir ./dist",
+    "test": "mocha -r ts-node/register test/**.ts",
+    "postinstall": "yarn run build"
   },
   "dependencies": {
     "automerge": "0.14.1",
@@ -31,9 +32,6 @@
     "prettier": "^2.0.5",
     "ts-loader": "^8.0.1",
     "ts-node": "^8.10.2",
-    "typescript": "^3.9.7",
-    "webpack": "^4.43.0",
-    "webpack-cli": "^3.3.12",
-    "webpack-dev-server": "^3.11.0"
+    "typescript": "^3.9.7"
   }
 }
