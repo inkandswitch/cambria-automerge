@@ -633,6 +633,13 @@ describe('Has basic schema tools', () => {
       lens: [addProperty({ name: 'other', type: 'string' })],
     }
 
+    const ARRAY_V3_LENS_CHANGE = {
+      kind: 'lens' as const,
+      from: 'array-v2',
+      to: 'array-v3',
+      lens: [renameProperty('tags', 'newtags')],
+    }
+
     interface ArrayTestDoc {
       tags: string[]
     }
@@ -688,15 +695,17 @@ describe('Has basic schema tools', () => {
       })
     })
 
-    it('can write and read with an unrelated lens conversion', () => {
+    it('can insert/replace array elements w/ an unrelated lens conversion', () => {
       const cambria = Cambria.init({
-        schema: 'array-v1',
+        schema: 'array-v2',
         lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
       })
       const changeMaker = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria))
 
       const [, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
-        doc.tags = ['maddening', 'infuriating', 'adorable']
+        doc.tags.push('maddening')
+        doc.tags.push('infuriating')
+        doc.tags.push('adorable')
         doc.tags[1] = 'excruciating'
       })
 
@@ -704,20 +713,50 @@ describe('Has basic schema tools', () => {
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria2))
       assert.deepEqual(frontend, {
+        other: '',
         tags: ['maddening', 'excruciating', 'adorable'],
+      })
+    })
+
+    it('can write to an array via assignment with an unrelated lens conversion', () => {
+      const doc1 = Cambria.init({
+        schema: 'array-v2',
+        lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
+      })
+
+      // fill in default values by applying an empty change
+      const [, initialPatch] = Cambria.applyChanges(doc1, [])
+
+      // fill in default values by applying a patch full of defaults
+      const changeMaker = Frontend.applyPatch(Frontend.init(), initialPatch)
+      const [, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
+        doc.tags = ['maddening', 'infuriating', 'adorable']
+      })
+
+      const [, arrayPatch] = Cambria.applyChanges(doc1, [
+        { schema: 'array-v1', change, lenses: [] },
+      ])
+
+      let doc = Frontend.applyPatch(Frontend.init(), initialPatch)
+      doc = Frontend.applyPatch(doc, arrayPatch)
+
+      assert.deepEqual(doc, {
+        tags: ['maddening', 'infuriating', 'adorable'],
       })
     })
 
     it('can handle array deletes', () => {
       // this lens has nothing to do with arrays but still pushes the patch thru cloudina
       const cambria = Cambria.init({
-        schema: 'array-v1',
+        schema: 'array-v2',
         lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
       })
       const changeMaker = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria))
 
       const [docWithArrays, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
-        doc.tags = ['maddening', 'infuriating', 'adorable']
+        doc.tags.push('maddening')
+        doc.tags.push('infuriating')
+        doc.tags.push('adorable')
       })
       const [, delChange] = Frontend.change<unknown, ArrayTestDoc>(docWithArrays, (doc) => {
         delete doc.tags[1]
@@ -728,9 +767,38 @@ describe('Has basic schema tools', () => {
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria3))
       assert.deepEqual(frontend, {
+        other: '',
         tags: ['maddening', 'adorable'],
       })
     })
+
+    // it('reads a renamed property containing an array', () => {
+    //   // this lens has nothing to do with arrays but still pushes the patch thru cloudina
+    //   const doc1 = Cambria.init({
+    //     schema: 'array-v3',
+    //     lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE, ARRAY_V3_LENS_CHANGE],
+    //   })
+
+    //   // fill in default values by applying an empty change
+    //   const [, initialPatch] = Cambria.applyChanges(doc1, [])
+
+    //   // fill in default values by applying a patch full of defaults
+    //   const changeMaker = Frontend.applyPatch(Frontend.init(), initialPatch)
+    //   const [, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
+    //     doc.tags = ['maddening', 'infuriating', 'adorable']
+    //   })
+
+    //   const [, arrayPatch] = Cambria.applyChanges(doc1, [
+    //     { kind: 'change' as const, schema: 'array-v1', change },
+    //   ])
+
+    //   let doc = Frontend.applyPatch(Frontend.init(), initialPatch)
+    //   doc = Frontend.applyPatch(doc, arrayPatch)
+
+    //   assert.deepEqual(doc, {
+    //     newtags: ['maddening', 'adorable'],
+    //   })
+    // })
 
     // todo: insert an object into an array (not implemented yet)
     // (we have unimplemented paths on sending in make ops)
