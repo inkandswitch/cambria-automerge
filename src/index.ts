@@ -1,4 +1,4 @@
-import { Set } from "immutable";
+import { Set } from 'immutable'
 import {
   LensGraph,
   initLensGraph,
@@ -6,122 +6,115 @@ import {
   lensGraphSchema,
   lensFromTo,
   lensGraphSchemas,
-} from "cloudina/dist/lens-graph";
+} from 'cloudina/dist/lens-graph'
 
-import { v5 } from "uuid";
+import { v5 } from 'uuid'
 
-const MAGIC_UUID = "f1bb7a0b-2d26-48ca-aaa3-92c63bbb5c50";
+const MAGIC_UUID = 'f1bb7a0b-2d26-48ca-aaa3-92c63bbb5c50'
 
-type ObjectId = string;
-type ObjectType = "list" | "object";
+type ObjectId = string
+type ObjectType = 'list' | 'object'
 
 // This import doesn't pull in types for the Backend functions,
 // maybe because we're importing from a non-root file?
-import {
-  Backend,
-  Op,
-  Clock,
-  Change,
-  Patch as AutomergePatch,
-  BackendState,
-} from "automerge";
+import { Backend, Op, Clock, Change, Patch as AutomergePatch, BackendState } from 'automerge'
 
-import { JSONSchema7 } from "json-schema";
+import { JSONSchema7 } from 'json-schema'
 
-import { Patch as CloudinaPatch, LensSource, applyLensToPatch } from "cloudina";
+import { Patch as CloudinaPatch, LensSource, applyLensToPatch } from 'cloudina'
 
-import { inspect } from "util";
+import { inspect } from 'util'
 
 // applyPatch PATCH needs to become - buildChange
 // buildChange needs to incrementally track op state re 'make' - list 'insert' 'del'
 // need to track deps/clock differently at the top level than at the instance level
 // seq will be different b/c of lenses
 
-const ROOT_ID = "00000000-0000-0000-0000-000000000000";
-export const CAMBRIA_MAGIC_ACTOR = "0000000000";
+const ROOT_ID = '00000000-0000-0000-0000-000000000000'
+export const CAMBRIA_MAGIC_ACTOR = '0000000000'
 
 function deepInspect(object: any) {
-  return inspect(object, false, null, true);
+  return inspect(object, false, null, true)
 }
 
 const emptySchema = {
-  $schema: "http://json-schema.org/draft-07/schema",
-  type: "object" as const,
+  $schema: 'http://json-schema.org/draft-07/schema',
+  type: 'object' as const,
   additionalProperties: false,
-};
-
-export interface Instance {
-  clock: Clock;
-  schema: string;
-  deps: Clock;
-  bootstrapped: boolean;
-  // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
-  state: BackendState;
 }
 
-export type CambriaBlock = AutomergeChange | RegisteredLens;
+export interface Instance {
+  clock: Clock
+  schema: string
+  deps: Clock
+  bootstrapped: boolean
+  // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
+  state: BackendState
+}
 
-type ElemCache = { [key: string]: Op };
+export type CambriaBlock = AutomergeChange | RegisteredLens
+
+type ElemCache = { [key: string]: Op }
 
 export interface RegisteredLens {
-  kind: "lens";
-  to: string;
-  from: string;
-  lens: LensSource;
+  kind: 'lens'
+  to: string
+  from: string
+  lens: LensSource
 }
 
 export interface AutomergeChange {
-  kind: "change";
-  schema: string;
-  change: Change;
+  kind: 'change'
+  schema: string
+  change: Change
 }
 
 export type InitOptions = {
-  actorId?: string;
-  schema?: string;
-  lenses?: RegisteredLens[];
-  deferActorId?: boolean;
-  freeze?: boolean;
-};
+  actorId?: string
+  schema?: string
+  lenses?: RegisteredLens[]
+  deferActorId?: boolean
+  freeze?: boolean
+}
 
 export function init(options: InitOptions = {}): CambriaState {
-  return new CambriaState(options);
+  return new CambriaState(options)
 }
 
 export function applyChanges(
   doc: CambriaState,
   changes: CambriaBlock[]
 ): [CambriaState, AutomergePatch] {
-  const patch = doc.applyChanges(changes);
-  return [doc, patch];
+  const patch = doc.applyChanges(changes)
+  return [doc, patch]
 }
 
 export function applyLocalChange(
   doc: CambriaState,
   request: Change
 ): [CambriaState, AutomergePatch] {
-  let patch = doc.applyLocalChange(request);
-  return [doc, patch];
+  let patch = doc.applyLocalChange(request)
+  return [doc, patch]
 }
 
 export function getChanges(doc: CambriaState, haveDeps: Clock): CambriaBlock[] {
-  return doc.getChanges(haveDeps);
+  return doc.getChanges(haveDeps)
 }
 
 export class CambriaState {
-  schema: string;
-  history: CambriaBlock[];
-  lensGraph: LensGraph;
-  private instances: { [schema: string]: Instance };
+  schema: string
+  history: CambriaBlock[]
+  lensGraph: LensGraph
+  private instances: { [schema: string]: Instance }
 
-  constructor({ schema = "mu", lenses = [] }: InitOptions) {
-    this.schema = schema;
-    this.history = [];
-    this.instances = {};
+  constructor({ schema = 'mu', lenses = [] }: InitOptions) {
+    this.schema = schema
+    this.history = []
+    this.instances = {}
     this.lensGraph = lenses.reduce<LensGraph>(
       (graph, lens) => registerLens(graph, lens.from, lens.to, lens.lens),
       initLensGraph()
-    );
+    )
   }
 
   applyLocalChange(request: Change): AutomergePatch {
@@ -159,11 +152,11 @@ export class CambriaState {
 
     return patch;
      */
-    throw new RangeError("unimplemented");
+    throw new RangeError('unimplemented')
   }
 
   reset() {
-    this.instances = {};
+    this.instances = {}
   }
 
   // take a change and apply it everywhere
@@ -171,42 +164,42 @@ export class CambriaState {
   // take all changes and apply them in one place
 
   applyChanges(blocks: CambriaBlock[]): AutomergePatch {
-    this.history.push(...blocks);
-    const instance: Instance = this.getInstance(this.schema);
-    const history = this.history;
+    this.history.push(...blocks)
+    const instance: Instance = this.getInstance(this.schema)
+    const history = this.history
     const [newInstance, patch, newLensGraph] = applySchemaChanges(
       blocks,
       instance,
       this.lensGraph,
       history
-    );
-    this.instances[this.schema] = newInstance;
-    this.lensGraph = newLensGraph;
-    return patch;
+    )
+    this.instances[this.schema] = newInstance
+    this.lensGraph = newLensGraph
+    return patch
   }
 
   getChanges(haveDeps: Clock): CambriaBlock[] {
     // FIXME - todo
-    return [];
+    return []
   }
 
   private getInstance(schema: string): Instance {
     if (!this.instances[schema]) {
-      this.instances[schema] = initInstance(schema);
+      this.instances[schema] = initInstance(schema)
     }
-    return this.instances[schema];
+    return this.instances[schema]
   }
 }
 
 function initInstance(schema): Instance {
-  const state = Backend.init();
+  const state = Backend.init()
   return {
     state,
     deps: {},
     schema,
     bootstrapped: false,
     clock: {},
-  };
+  }
 }
 
 function convertOp(
@@ -217,26 +210,26 @@ function convertOp(
   lensGraph: LensGraph,
   elemCache: ElemCache
 ): Op[] {
-  const op = change.ops[index];
+  const op = change.ops[index]
   // console.log("\n convertOp pipeline:");
   // console.log({ from: from.schema, to: to.schema, op });
-  const lensStack = lensFromTo(lensGraph, from.schema, to.schema);
-  const jsonschema7 = lensGraphSchema(lensGraph, from.schema);
-  const patch = opToPatch(op, from, elemCache);
+  const lensStack = lensFromTo(lensGraph, from.schema, to.schema)
+  const jsonschema7 = lensGraphSchema(lensGraph, from.schema)
+  const patch = opToPatch(op, from, elemCache)
   // console.log({ patch });
-  const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
+  const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7)
   // console.log({ convertedPatch });
   // todo: optimization idea:
   // if cloudina didn't do anything (convertedPatch deepEquals patch)
   // then we should just be able to set convertedOps = [op]
 
-  const convertedOps = patchToOps(convertedPatch, change, index, to);
+  const convertedOps = patchToOps(convertedPatch, change, index, to)
   // console.log({ convertedOps });
 
   // a convenient debug print to see the pipeline:
   // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
 
-  return convertedOps;
+  return convertedOps
 }
 
 function getInstanceAt(
@@ -247,28 +240,18 @@ function getInstanceAt(
   history: CambriaBlock[]
 ): [Instance, LensGraph] {
   const blockIndex = history.findIndex(
-    (block) =>
-      block.kind === "change" &&
-      block.change.actor === actorId &&
-      block.change.seq == seq
-  );
+    (block) => block.kind === 'change' && block.change.actor === actorId && block.change.seq == seq
+  )
 
   if (blockIndex === -1)
-    throw new Error(
-      `Could not find block with actorId ${actorId} and seq ${seq}`
-    );
+    throw new Error(`Could not find block with actorId ${actorId} and seq ${seq}`)
 
-  const blocksToApply = history.slice(0, blockIndex);
+  const blocksToApply = history.slice(0, blockIndex)
 
   // todo: make sure we set default values even if lens not in doc
-  const empty = initInstance(schema);
-  const [instance, _, newGraph] = applySchemaChanges(
-    blocksToApply,
-    empty,
-    graph,
-    history
-  );
-  return [instance, newGraph];
+  const empty = initInstance(schema)
+  const [instance, _, newGraph] = applySchemaChanges(blocksToApply, empty, graph, history)
+  return [instance, newGraph]
 }
 
 function convertChange(
@@ -277,38 +260,38 @@ function convertChange(
   toInstance: Instance,
   lensGraph: LensGraph
 ): Change {
-  const ops: Op[] = [];
+  const ops: Op[] = []
   // copy the from and to instances locally to ensure we don't mutate them.
   // we're going to play these instances forward locally here as we apply the ops,
   // but then we'll throw that out and just return a change which will be
   // applied by the caller of this function to the toInstance.
   // todo: is this unnecessary?
-  let from = { ...fromInstance };
-  let to = { ...toInstance };
+  let from = { ...fromInstance }
+  let to = { ...toInstance }
 
   // cache array insert ops by the elem that they created
   // (cache is change-scoped because we assume insert+set combinations are within same change)
-  const elemCache: ElemCache = {};
+  const elemCache: ElemCache = {}
 
   for (let i = 0; i < block.change.ops.length; i++) {
-    const op = block.change.ops[i];
-    let convertedOps;
-    if (op.action === "ins") {
+    const op = block.change.ops[i]
+    let convertedOps
+    if (op.action === 'ins') {
       // add the elem to cache
-      elemCache[`${block.change.actor}:${op.elem}`] = op;
+      elemCache[`${block.change.actor}:${op.elem}`] = op
 
       // apply the discarded insert to the from instance before we skip conversion
-      from = applyOps(from, [op], block.change.actor);
-      continue;
+      from = applyOps(from, [op], block.change.actor)
+      continue
     }
-    convertedOps = convertOp(block.change, i, from, to, lensGraph, elemCache);
-    ops.push(...convertedOps);
+    convertedOps = convertOp(block.change, i, from, to, lensGraph, elemCache)
+    ops.push(...convertedOps)
 
     // After we convert this op, we need to incrementally apply it
     // to our instances so that we can do path-objId resolution using
     // these instances
-    from = applyOps(from, [op], block.change.actor);
-    to = applyOps(to, convertedOps, block.change.actor);
+    from = applyOps(from, [op], block.change.actor)
+    to = applyOps(to, convertedOps, block.change.actor)
   }
 
   const change = {
@@ -317,9 +300,9 @@ function convertChange(
     actor: block.change.actor,
     seq: block.change.seq,
     deps: block.change.deps, // todo: does this make sense? I think so?
-  };
+  }
 
-  return change;
+  return change
 }
 
 // write a change to the instance,
@@ -332,16 +315,16 @@ function applySchemaChanges(
   lensGraph: LensGraph,
   history: CambriaBlock[]
 ): [Instance, AutomergePatch, LensGraph] {
-  const changesToApply: Change[] = [];
+  const changesToApply: Change[] = []
 
   for (let block of blocks) {
-    if (block.kind === "lens") {
-      lensGraph = registerLens(lensGraph, block.from, block.to, block.lens);
-      continue;
+    if (block.kind === 'lens') {
+      lensGraph = registerLens(lensGraph, block.from, block.to, block.lens)
+      continue
     }
 
     if (block.schema === instance.schema) {
-      changesToApply.push(block.change);
+      changesToApply.push(block.change)
     } else {
       const [from_instance, _] = getInstanceAt(
         block.schema,
@@ -349,54 +332,49 @@ function applySchemaChanges(
         block.change.seq,
         lensGraph,
         history
-      );
+      )
 
-      const newChange = convertChange(
-        block,
-        from_instance,
-        instance,
-        lensGraph
-      );
-      changesToApply.push(newChange);
+      const newChange = convertChange(block, from_instance, instance, lensGraph)
+      changesToApply.push(newChange)
     }
   }
 
   if (!instance.bootstrapped) {
-    const bootstrapChange = bootstrap(instance, lensGraph);
+    const bootstrapChange = bootstrap(instance, lensGraph)
 
     // console.log(
     //   deepInspect({ schema: instance.schema, change: bootstrapChange })
     // );
     // console.log("bootstrapChange", bootstrapChange);
-    changesToApply.unshift(bootstrapChange);
-    instance.bootstrapped = true;
+    changesToApply.unshift(bootstrapChange)
+    instance.bootstrapped = true
   }
 
   // console.log("about to apply the final constructed change");
-  const [newInstance, patch] = applyChangesToInstance(instance, changesToApply);
+  const [newInstance, patch] = applyChangesToInstance(instance, changesToApply)
 
-  return [newInstance, patch, lensGraph];
+  return [newInstance, patch, lensGraph]
 }
 
 function bootstrap(instance: Instance, lensGraph: LensGraph): Change {
-  const urOp = [{ op: "add" as const, path: "", value: {} }];
-  const jsonschema7: JSONSchema7 = lensGraphSchema(lensGraph, instance.schema);
+  const urOp = [{ op: 'add' as const, path: '', value: {} }]
+  const jsonschema7: JSONSchema7 = lensGraphSchema(lensGraph, instance.schema)
   if (jsonschema7 === undefined) {
-    throw new Error(`Could not find JSON schema for schema ${instance.schema}`);
+    throw new Error(`Could not find JSON schema for schema ${instance.schema}`)
   }
-  const defaultsPatch = applyLensToPatch([], urOp, jsonschema7).slice(1);
+  const defaultsPatch = applyLensToPatch([], urOp, jsonschema7).slice(1)
 
   const bootstrapChange: Change = {
     actor: CAMBRIA_MAGIC_ACTOR,
-    message: "",
+    message: '',
     deps: {},
     seq: 1,
     ops: [],
-  };
+  }
 
-  bootstrapChange.ops = patchToOps(defaultsPatch, bootstrapChange, 1, instance);
+  bootstrapChange.ops = patchToOps(defaultsPatch, bootstrapChange, 1, instance)
 
-  return bootstrapChange;
+  return bootstrapChange
 }
 
 function patchToOps(
@@ -405,265 +383,232 @@ function patchToOps(
   opIndex: number,
   instance: Instance
 ): Op[] {
-  const opCache = {};
-  const pathCache = { [""]: ROOT_ID };
+  const opCache = {}
+  const pathCache = { ['']: ROOT_ID }
   // todo: see if we can refactor to have TS tell us what's missing here
   const ops = patch
     .map((patchop, i) => {
-      const acc: Op[] = [];
-      let makeObj = v5(
-        `${origin.actor}:${origin.seq}:${opIndex}:${i}"`,
-        MAGIC_UUID
-      );
-      let action;
-      if (patchop.op === "remove") {
-        action = "del";
-      } else if (patchop.op === "add" || patchop.op === "replace") {
+      const acc: Op[] = []
+      let makeObj = v5(`${origin.actor}:${origin.seq}:${opIndex}:${i}"`, MAGIC_UUID)
+      let action
+      if (patchop.op === 'remove') {
+        action = 'del'
+      } else if (patchop.op === 'add' || patchop.op === 'replace') {
         if (
           patchop.value === null ||
-          ["string", "number", "boolean"].includes(typeof patchop.value)
+          ['string', 'number', 'boolean'].includes(typeof patchop.value)
         ) {
-          action = "set";
+          action = 'set'
         } else if (Array.isArray(patchop.value)) {
-          action = "link";
-          acc.push({ action: "makeList", obj: makeObj });
-          pathCache[patchop.path] = makeObj;
-        } else if (
-          typeof patchop.value === "object" &&
-          Object.keys(patchop.value).length === 0
-        ) {
-          action = "link";
-          acc.push({ action: "makeMap", obj: makeObj });
-          pathCache[patchop.path] = makeObj;
+          action = 'link'
+          acc.push({ action: 'makeList', obj: makeObj })
+          pathCache[patchop.path] = makeObj
+        } else if (typeof patchop.value === 'object' && Object.keys(patchop.value).length === 0) {
+          action = 'link'
+          acc.push({ action: 'makeMap', obj: makeObj })
+          pathCache[patchop.path] = makeObj
         } else {
-          throw new RangeError(`bad value for patchop=${deepInspect(patchop)}`);
+          throw new RangeError(`bad value for patchop=${deepInspect(patchop)}`)
         }
       } else {
-        throw new RangeError(`bad op type for patchop=${deepInspect(patchop)}`);
+        throw new RangeError(`bad op type for patchop=${deepInspect(patchop)}`)
       }
 
       // todo: in the below code, we need to resolve array indexes to element ids
       // (maybe some of it can happen in getObjId? consider array indexes
       // at intermediate points in the path)
-      let path_parts = patchop.path.split("/");
-      let key = path_parts.pop();
-      let obj_path = path_parts.join("/");
+      let path_parts = patchop.path.split('/')
+      let key = path_parts.pop()
+      let obj_path = path_parts.join('/')
 
-      const objId = getObjId(instance.state, obj_path) || pathCache[obj_path];
+      const objId = getObjId(instance.state, obj_path) || pathCache[obj_path]
 
-      if (getObjType(instance.state, objId) === "list") {
+      if (getObjType(instance.state, objId) === 'list') {
         if (key === undefined || parseInt(key) === NaN) {
-          throw new Error(`Expected array index on path ${patchop.path}`);
+          throw new Error(`Expected array index on path ${patchop.path}`)
         }
-        const originalOp = origin.ops[opIndex];
-        const opKey = originalOp.key;
+        const originalOp = origin.ops[opIndex]
+        const opKey = originalOp.key
 
-        if (patchop.op === "add") {
-          const insertAfter = findElemOfIndex(
-            instance.state,
-            objId,
-            parseInt(key) - 1
-          );
-          if (opKey === undefined)
-            throw new Error(`expected key on op: ${originalOp}`);
-          const insertElemId = parseInt(opKey.split(":")[1]);
+        if (patchop.op === 'add') {
+          const insertAfter = findElemOfIndex(instance.state, objId, parseInt(key) - 1)
+          if (opKey === undefined) throw new Error(`expected key on op: ${originalOp}`)
+          const insertElemId = parseInt(opKey.split(':')[1])
           acc.push({
-            action: "ins",
+            action: 'ins',
             obj: objId,
             key: insertAfter,
             elem: insertElemId,
-          });
+          })
         }
-        key = opKey;
+        key = opKey
       }
 
-      if (objId === undefined)
-        throw new Error(`Could not find object with path ${obj_path}`);
+      if (objId === undefined) throw new Error(`Could not find object with path ${obj_path}`)
 
-      if (action === "link") {
-        const op = { action, obj: objId, key, value: makeObj };
-        acc.push(op);
-      } else if (patchop.op === "add" || patchop.op === "replace") {
-        const op = { action, obj: objId, key, value: patchop.value };
-        acc.push(op);
+      if (action === 'link') {
+        const op = { action, obj: objId, key, value: makeObj }
+        acc.push(op)
+      } else if (patchop.op === 'add' || patchop.op === 'replace') {
+        const op = { action, obj: objId, key, value: patchop.value }
+        acc.push(op)
       } else {
-        const op = { action, obj: objId, key };
-        acc.push(op);
+        const op = { action, obj: objId, key }
+        acc.push(op)
       }
-      return acc;
+      return acc
     })
-    .flat();
+    .flat()
 
-  return ops;
+  return ops
 }
 
 function parseOpId(opid: string): { counter: number; actor: string } {
-  const regex = /^([0-9.]+)@(.*)$/;
-  const match = regex.exec(opid);
+  const regex = /^([0-9.]+)@(.*)$/
+  const match = regex.exec(opid)
   if (match == null) {
-    throw new RangeError(`Invalid OpId ${opid}`);
+    throw new RangeError(`Invalid OpId ${opid}`)
   }
-  const counter = parseFloat(match[1]);
-  const actor = match[2];
-  return { counter, actor };
+  const counter = parseFloat(match[1])
+  const actor = match[2]
+  return { counter, actor }
 }
 
-export function buildPath(
-  op: Op,
-  instance: Instance,
-  elemCache: ElemCache
-): string {
-  const backendState: any = instance.state;
-  const opSet = backendState.state;
-  let obj = op.obj;
-  let path: string[] = getPath(instance.state, obj) || [];
-  let key = op.key;
-  let arrayIndex;
-  if (getObjType(instance.state, obj) === "list") {
-    if (key === undefined) throw new Error("expected key on op");
+export function buildPath(op: Op, instance: Instance, elemCache: ElemCache): string {
+  const backendState: any = instance.state
+  const opSet = backendState.state
+  let obj = op.obj
+  let path: string[] = getPath(instance.state, obj) || []
+  let key = op.key
+  let arrayIndex
+  if (getObjType(instance.state, obj) === 'list') {
+    if (key === undefined) throw new Error('expected key on op')
     // if the key is in the elem cache (ie, inserted earlier in this change), look there.
     // otherwise we can just find the key in the
     if (Object.keys(elemCache).includes(key)) {
-      const prevKey = elemCache[key].key;
-      if (prevKey === undefined) throw new Error("expected key on insert op");
-      delete elemCache[key];
-      key = prevKey;
-      arrayIndex = findIndexOfElem(instance.state, obj, key) + 1;
+      const prevKey = elemCache[key].key
+      if (prevKey === undefined) throw new Error('expected key on insert op')
+      delete elemCache[key]
+      key = prevKey
+      arrayIndex = findIndexOfElem(instance.state, obj, key) + 1
     } else {
-      arrayIndex = findIndexOfElem(instance.state, obj, key);
+      arrayIndex = findIndexOfElem(instance.state, obj, key)
     }
-    key = String(arrayIndex);
+    key = String(arrayIndex)
   }
-  const finalPath = "/" + [...path, key].join("/");
-  return finalPath;
+  const finalPath = '/' + [...path, key].join('/')
+  return finalPath
 }
 
 // given an automerge instance, an array obj id, and an elem ID, return the array index
-function findIndexOfElem(
-  state: any,
-  objId: ObjectId,
-  insertKey: string
-): number {
-  if (insertKey === "_head") return -1;
+function findIndexOfElem(state: any, objId: ObjectId, insertKey: string): number {
+  if (insertKey === '_head') return -1
 
   // find the index of the element ID in the array
   // note: this code not exercised yet, but hopefully roughly right
-  return state
-    .getIn(["opSet", "byObject", objId, "_elemIds"])
-    .indexOf(insertKey);
+  return state.getIn(['opSet', 'byObject', objId, '_elemIds']).indexOf(insertKey)
 }
 
 // given an automerge instance, an array obj id, and an index, return the elem ID
 function findElemOfIndex(state: any, objId: ObjectId, index: number): string {
-  if (index === -1) return "_head";
+  if (index === -1) return '_head'
 
-  const elemId = state
-    .getIn(["opSet", "byObject", objId, "_elemIds"])
-    .keyOf(index); // todo: is this the right way to look for an index in SkipList?
+  const elemId = state.getIn(['opSet', 'byObject', objId, '_elemIds']).keyOf(index) // todo: is this the right way to look for an index in SkipList?
   if (elemId === undefined || elemId === null) {
-    throw new Error(`Couldn't find array index ${index} in object ${objId}`);
+    throw new Error(`Couldn't find array index ${index} in object ${objId}`)
   }
-  return elemId;
+  return elemId
 }
 
 // Given a json path in a json doc, return the object ID at that path.
 // If the path doesn't resolve to an existing object ID, returns null
 // Todo: support lists
 function getObjId(state: any, path: string): ObjectId | null {
-  if (path === "") return ROOT_ID;
+  if (path === '') return ROOT_ID
 
-  const pathSegments = path.split("/").slice(1);
-  const opSet = state.get("opSet");
+  const pathSegments = path.split('/').slice(1)
+  const opSet = state.get('opSet')
 
-  let objectId = ROOT_ID;
+  let objectId = ROOT_ID
 
   for (const pathSegment of pathSegments) {
-    const objectKeys = opSet.getIn(["byObject", objectId]);
+    const objectKeys = opSet.getIn(['byObject', objectId])
 
     // _keys contains an array for each key in case there are conflicts;
     // it's sorted so we can just take the first element
-    const newObjectId = objectKeys.getIn(["_keys", pathSegment, 0, "value"]);
+    const newObjectId = objectKeys.getIn(['_keys', pathSegment, 0, 'value'])
 
     // Sometimes, the path we're looking for isn't in the instance, give up
     if (newObjectId === undefined) {
-      return null;
+      return null
     }
 
-    objectId = newObjectId;
+    objectId = newObjectId
   }
 
-  return objectId;
+  return objectId
 }
 
 // given an automerge backend state and object ID, returns the type of the object
 function getObjType(state: any, objId: ObjectId): ObjectType {
-  const objType = state.getIn(["opSet", "byObject", objId, "_init", "action"]);
-  return objType === "makeList" || objType === "makeText" ? "list" : "object";
+  const objType = state.getIn(['opSet', 'byObject', objId, '_init', 'action'])
+  return objType === 'makeList' || objType === 'makeText' ? 'list' : 'object'
 }
 
 function getPath(state: any, obj: string): string[] | null {
-  const opSet = state.get("opSet");
-  let path: string[] = [];
+  const opSet = state.get('opSet')
+  let path: string[] = []
   while (obj !== ROOT_ID) {
-    const ref = opSet.getIn(["byObject", obj, "_inbound"], Set()).first();
-    if (!ref) return null;
-    obj = ref.get("obj");
-    if (getObjType(state, obj) === "list") {
-      const index = opSet
-        .getIn(["byObject", obj, "_elemIds"])
-        .indexOf(ref.get("key"));
-      if (index < 0) return null;
-      path.unshift(index);
+    const ref = opSet.getIn(['byObject', obj, '_inbound'], Set()).first()
+    if (!ref) return null
+    obj = ref.get('obj')
+    if (getObjType(state, obj) === 'list') {
+      const index = opSet.getIn(['byObject', obj, '_elemIds']).indexOf(ref.get('key'))
+      if (index < 0) return null
+      path.unshift(index)
     } else {
-      path.unshift(ref.get("key"));
+      path.unshift(ref.get('key'))
     }
   }
 
-  return path;
+  return path
 }
 
-export function opToPatch(
-  op: Op,
-  instance: Instance,
-  elemCache: ElemCache
-): CloudinaPatch {
+export function opToPatch(op: Op, instance: Instance, elemCache: ElemCache): CloudinaPatch {
   switch (op.action) {
-    case "set": {
+    case 'set': {
       // if the elemCache has the key, we're processing an insert
-      const action = op.key && elemCache[op.key] ? "add" : "replace";
-      const path = buildPath(op, instance, elemCache);
-      const { value } = op;
+      const action = op.key && elemCache[op.key] ? 'add' : 'replace'
+      const path = buildPath(op, instance, elemCache)
+      const { value } = op
 
-      return [{ op: action, path, value }];
+      return [{ op: action, path, value }]
     }
-    case "del": {
-      const path = buildPath(op, instance, elemCache);
-      return [{ op: "remove", path }];
+    case 'del': {
+      const path = buildPath(op, instance, elemCache)
+      return [{ op: 'remove', path }]
     }
     default:
       // note: inserts in Automerge 0 don't produce a patch, so we don't have a case for them here.
       // (we swallow them earlier in the process)
-      throw new RangeError(`unsupported op ${deepInspect(op)}`);
+      throw new RangeError(`unsupported op ${deepInspect(op)}`)
   }
 }
 
 function calcDeps(change: Change, deps: Clock): Clock {
-  const newDeps = {};
+  const newDeps = {}
   for (const actor in deps) {
     if (deps[actor] > (change.deps[actor] || 0)) {
-      newDeps[actor] = deps[actor];
+      newDeps[actor] = deps[actor]
     }
   }
-  newDeps[change.actor] = change.seq;
-  return newDeps;
+  newDeps[change.actor] = change.seq
+  return newDeps
 }
 
-function applyChangesToInstance(
-  instance: Instance,
-  changes: Change[]
-): [Instance, AutomergePatch] {
+function applyChangesToInstance(instance: Instance, changes: Change[]): [Instance, AutomergePatch] {
   // console.log(`applying changes to ${instance.schema}`, deepInspect(changes));
-  const [backendState, patch] = Backend.applyChanges(instance.state, changes);
+  const [backendState, patch] = Backend.applyChanges(instance.state, changes)
 
   return [
     {
@@ -674,23 +619,19 @@ function applyChangesToInstance(
       state: backendState,
     },
     patch,
-  ];
+  ]
 }
 
-function applyOps(
-  instance: Instance,
-  ops: Op[],
-  actor: string = CAMBRIA_MAGIC_ACTOR
-): Instance {
+function applyOps(instance: Instance, ops: Op[], actor: string = CAMBRIA_MAGIC_ACTOR): Instance {
   // construct a change out of the ops
   const change = {
     ops,
-    message: "",
+    message: '',
     actor: actor,
     seq: (instance.clock[actor] || 0) + 1,
     deps: instance.deps,
-  };
+  }
 
-  const [newInstance, _] = applyChangesToInstance(instance, [change]);
-  return newInstance;
+  const [newInstance, _] = applyChangesToInstance(instance, [change])
+  return newInstance
 }
