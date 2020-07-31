@@ -734,7 +734,7 @@ describe('Has basic schema tools', () => {
 
     it('can write and read with an unrelated lens conversion', () => {
       // this lens has nothing to do with arrays but still pushes the patch thru cloudina
-      const arrayV2Lens = {
+      const ARRAY_V2_LENS_CHANGE = {
         kind: 'lens' as const,
         from: 'array-v1',
         to: 'array-v2',
@@ -742,65 +742,29 @@ describe('Has basic schema tools', () => {
       }
 
       const doc1 = Cambria.init({
-        schema: 'array-v2',
-        lenses: [ARRAY_V1_LENS_CHANGE, arrayV2Lens],
+        schema: 'array-v1',
+        lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
       })
 
-      const [doc2, patch2] = Cambria.applyChanges(doc1, [])
+      // fill in default values by applying an empty change
+      const [, initialPatch] = Cambria.applyChanges(doc1, [])
 
-      const arrayObjId = patch2.diffs[0].obj
+      // fill in default values by applying a patch full of defaults
+      const changeMaker = Frontend.applyPatch(Frontend.init(), initialPatch)
+      const [, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
+        doc.tags = ['maddening', 'infuriating', 'adorable']
+        doc.tags[1] = 'excruciating'
+      })
 
-      const [, patch3] = Cambria.applyChanges(doc2, [
-        {
-          kind: 'change' as const,
-          schema: 'array-v1',
-          change: {
-            message: '',
-            actor: ACTOR_ID_1,
-            seq: 1,
-            deps: { '0000000000': 1 },
-            ops: [
-              // insert "feature" at the beginning
-              { action: 'ins', obj: arrayObjId, key: '_head', elem: 1 },
-              {
-                action: 'set',
-                obj: arrayObjId,
-                key: `${ACTOR_ID_1}:1`,
-                value: 'feature',
-              },
-
-              // insert "bug" as the second element
-              // (commented out to simplify for now)
-              {
-                action: 'ins',
-                obj: arrayObjId,
-                key: `${ACTOR_ID_1}:1`,
-                elem: 2,
-              },
-              {
-                action: 'set',
-                obj: arrayObjId,
-                key: `${ACTOR_ID_1}:2`,
-                value: 'bug',
-              },
-              {
-                action: 'set',
-                obj: arrayObjId,
-                key: `${ACTOR_ID_1}:2`,
-                value: 'defect',
-              },
-            ],
-          },
-        },
+      const [, arrayPatch] = Cambria.applyChanges(doc1, [
+        { kind: 'change' as const, schema: 'array-v1', change },
       ])
 
-      let doc = Frontend.init()
-      doc = Frontend.applyPatch(doc, patch2)
-      doc = Frontend.applyPatch(doc, patch3)
+      let doc = Frontend.applyPatch(Frontend.init(), initialPatch)
+      doc = Frontend.applyPatch(doc, arrayPatch)
 
       assert.deepEqual(doc, {
-        tags: ['feature', 'defect'],
-        other: '',
+        tags: ['maddening', 'excruciating', 'adorable'],
       })
     })
 
