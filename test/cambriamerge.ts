@@ -174,16 +174,15 @@ describe('Has basic schema tools', () => {
       change,
     }
 
-    const [cambria, initialPatch] = Cambria.applyChanges(
+    const [cambria] = Cambria.applyChanges(
       Cambria.init({ schema: LAST_SCHEMA, lenses: [...AllLensChanges, RenameLensChange] }),
       []
     )
-    const frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
 
-    const [, convertedV1Patch] = Cambria.applyChanges(cambria, [cambriaChange])
+    const [finalDoc] = Cambria.applyChanges(cambria, [cambriaChange])
 
-    const finalFrontend = Frontend.applyPatch(frontend, convertedV1Patch)
-    assert.deepEqual(finalFrontend, {
+    const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
+    assert.deepEqual(frontend, {
       title: 'hello',
       summary: '',
       details: {
@@ -208,7 +207,7 @@ describe('Has basic schema tools', () => {
       doc.details.author = 'Peter'
     })
 
-    const [, patch2] = Cambria.applyChanges(state1, [
+    const [finalDoc] = Cambria.applyChanges(state1, [
       { schema: InitialLensChange.to, change: nameChange, lenses: [] },
       {
         schema: FillOutProjectLensChange.to,
@@ -217,10 +216,8 @@ describe('Has basic schema tools', () => {
       },
     ])
 
-    let doc = Frontend.init()
-    doc = Frontend.applyPatch(doc, patch2)
-
-    assert.deepEqual(doc, {
+    const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
+    assert.deepEqual(frontend, {
       name: 'actor 2 says hi',
       summary: '',
     })
@@ -240,7 +237,7 @@ describe('Has basic schema tools', () => {
       doc.details.author = 'Peter'
     })
 
-    const [, patch2] = Cambria.applyChanges(state1, [
+    const [finalDoc] = Cambria.applyChanges(state1, [
       { schema: InitialLensChange.to, change: nameChange, lenses: [] },
       {
         schema: AllLensChanges.slice(-1)[0].to,
@@ -249,10 +246,8 @@ describe('Has basic schema tools', () => {
       },
     ])
 
-    let doc = Frontend.init()
-    doc = Frontend.applyPatch(doc, patch2)
-
-    assert.deepEqual(doc, {
+    const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
+    assert.deepEqual(frontend, {
       title: 'hello',
       summary: '',
       details: { author: 'Peter' },
@@ -273,7 +268,7 @@ describe('Has basic schema tools', () => {
       doc.details.author = 'Peter'
     })
 
-    const [, patch2] = Cambria.applyChanges(state1, [
+    const [finalDoc] = Cambria.applyChanges(state1, [
       { schema: InitialLensChange.to, change: nameChange, lenses: [] },
       {
         schema: FillOutProjectLensChange.to,
@@ -282,10 +277,8 @@ describe('Has basic schema tools', () => {
       },
     ])
 
-    let doc = Frontend.init()
-    doc = Frontend.applyPatch(doc, patch2)
-
-    assert.deepEqual(doc, {
+    const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
+    assert.deepEqual(frontend, {
       name: 'actor 2 says hi',
       summary: '',
     })
@@ -308,14 +301,12 @@ describe('Has basic schema tools', () => {
       const [, nameChange] = Frontend.change(v1Frontend, (doc: any) => {
         doc.name = 'hello'
       })
-      const [, noOpPatch] = Cambria.applyChanges(removeCambria, [
+      const [finalDoc] = Cambria.applyChanges(removeCambria, [
         { schema: InitialLensChange.to, change: nameChange, lenses: [] },
       ])
 
-      let doc = Frontend.init()
-      doc = Frontend.applyPatch(doc, noOpPatch)
-
-      assert.deepEqual(doc, {
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
+      assert.deepEqual(frontend, {
         summary: '',
       })
     })
@@ -341,11 +332,10 @@ describe('Has basic schema tools', () => {
     })
 
     it.skip('can accept a real change', () => {
-      const [cambria, initialPatch] = Cambria.applyChanges(
+      const [cambria] = Cambria.applyChanges(
         Cambria.init({ schema: LAST_SCHEMA, lenses: AllLensChanges }),
         []
       )
-      const frontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
 
       const [, filledOutInitialPatch] = Cambria.applyChanges(
         Cambria.init({ schema: 'project-v2', lenses: AllLensChanges }),
@@ -361,7 +351,7 @@ describe('Has basic schema tools', () => {
       })
 
       // wrap that change in Cambria details
-      const [, editPatch] = Cambria.applyChanges(cambria, [
+      const [finalDoc] = Cambria.applyChanges(cambria, [
         {
           schema: 'project-v2',
           change,
@@ -370,9 +360,8 @@ describe('Has basic schema tools', () => {
       ])
 
       // confirm the resulting patch is correct!
-      const patchedFrontend = Frontend.applyPatch(frontend, editPatch)
-
-      assert.deepEqual(patchedFrontend, {
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
+      assert.deepEqual(frontend, {
         details: {
           author: 'Klaus',
           created_at: '',
@@ -396,13 +385,12 @@ describe('Has basic schema tools', () => {
       })
 
       // make a new modern Cambria and apply the patch
-      const [cambria, initialPatch] = Cambria.applyChanges(
+      const [cambria] = Cambria.applyChanges(
         Cambria.init({ schema: LAST_SCHEMA, lenses: AllLensChanges }),
         []
       )
-      const initialFrontend = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
 
-      const [, patch] = Cambria.applyChanges(cambria, [
+      const [finalDoc] = Cambria.applyChanges(cambria, [
         {
           schema: 'project-v2',
           change,
@@ -410,8 +398,7 @@ describe('Has basic schema tools', () => {
         },
       ])
 
-      const frontend = Frontend.applyPatch(initialFrontend, patch)
-
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
       assert.deepEqual(frontend, {
         title: '',
         summary: '',
@@ -424,7 +411,7 @@ describe('Has basic schema tools', () => {
     })
 
     it('can convert a rename inside an object', () => {
-      const [cambria, initialPatch] = Cambria.applyChanges(
+      const [cambria] = Cambria.applyChanges(
         Cambria.init({ schema: LAST_SCHEMA, lenses: AllLensChanges }),
         []
       )
@@ -439,7 +426,7 @@ describe('Has basic schema tools', () => {
         doc.details.date = 'long long ago'
       })
 
-      const [, patch] = Cambria.applyChanges(cambria, [
+      const [finalDoc] = Cambria.applyChanges(cambria, [
         {
           schema: 'project-v2',
           change,
@@ -447,9 +434,7 @@ describe('Has basic schema tools', () => {
         },
       ])
 
-      let doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
-      doc = Frontend.applyPatch(doc, patch)
-
+      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
       assert.deepEqual(doc, {
         title: '',
         summary: '',
@@ -470,7 +455,7 @@ describe('Has basic schema tools', () => {
 
       const LensChanges = [InitialLensChange, FillOutProjectLensChange, PlungeLensChange]
 
-      const [cambria, initialPatch] = Cambria.applyChanges(
+      const [cambria] = Cambria.applyChanges(
         Cambria.init({ schema: 'project-plunged', lenses: LensChanges }),
         []
       )
@@ -486,7 +471,7 @@ describe('Has basic schema tools', () => {
         doc.created_at = 'recently'
       })
 
-      const [, patch] = Cambria.applyChanges(cambria, [
+      const [finalDoc] = Cambria.applyChanges(cambria, [
         {
           schema: 'project-filled-out',
           change,
@@ -494,9 +479,7 @@ describe('Has basic schema tools', () => {
         },
       ])
 
-      let doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
-      doc = Frontend.applyPatch(doc, patch)
-
+      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
       assert.deepEqual(doc, {
         name: '',
         summary: '',
@@ -518,7 +501,7 @@ describe('Has basic schema tools', () => {
 
       const LensChanges = [InitialLensChange, FillOutProjectLensChange, HoistLensChange]
 
-      const [cambria, initialPatch] = Cambria.applyChanges(
+      const [cambria] = Cambria.applyChanges(
         Cambria.init({ schema: 'project-hoisted', lenses: LensChanges }),
         []
       )
@@ -534,7 +517,7 @@ describe('Has basic schema tools', () => {
         doc.details.author = 'Steven King'
       })
 
-      const [, patch] = Cambria.applyChanges(cambria, [
+      const [finalCambria] = Cambria.applyChanges(cambria, [
         {
           schema: 'project-filled-out',
           change,
@@ -542,9 +525,7 @@ describe('Has basic schema tools', () => {
         },
       ])
 
-      let doc = Frontend.applyPatch(Frontend.init(ACTOR_ID_1), initialPatch)
-      doc = Frontend.applyPatch(doc, patch)
-
+      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalCambria))
       assert.deepEqual(doc, {
         name: '',
         summary: '',
@@ -600,7 +581,7 @@ describe('Has basic schema tools', () => {
 
       if (!branch2ObjId) throw new Error('expected to find objID for branch2 map')
 
-      const [, patch3] = Cambria.applyChanges(doc1, [
+      const [finalDoc] = Cambria.applyChanges(doc1, [
         {
           schema: 'nested-v1',
           lenses: [],
@@ -621,10 +602,7 @@ describe('Has basic schema tools', () => {
         },
       ])
 
-      let doc = Frontend.init()
-      doc = Frontend.applyPatch(doc, patch2)
-      doc = Frontend.applyPatch(doc, patch3)
-
+      const doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
       assert.deepEqual(doc, {
         branch1: {
           leaf1: 'hello',
