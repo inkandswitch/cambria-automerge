@@ -503,6 +503,8 @@ export function buildPath(
   let key = op.key;
   if (getObjType(instance.state, obj) === "list") {
     if (key === undefined) throw new Error("expected key on op");
+    // if the key is in the elem cache (ie, inserted earlier in this change), look there.
+    // otherwise we can just find the key in the
     if (Object.keys(elemCache).includes(key)) {
       key = elemCache[key].key;
       if (key === undefined) throw new Error("expected key on insert op");
