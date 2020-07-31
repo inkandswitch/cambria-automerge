@@ -48,8 +48,6 @@ const AllLensChanges: Cambria.RegisteredLens[] = AllLenses.map((current, current
   lens: current
 }))
 
-console.log(AllLensChanges)
-
 // Use these when you need less
 const InitialLensChange = {
   kind: "lens" as const,
@@ -72,7 +70,7 @@ const RenameLensChange = {
   lens: RenameLens,
 };
 
-const PlungeLensChnage = {
+const PlungeLensChange = {
   kind: "lens" as const,
   from: "project-v1",
   to: "project-plunged",
@@ -337,15 +335,11 @@ describe("Has basic schema tools", () => {
     });
 
   });
-/*
+
   describe("nested objects", () => {
     it("can accept a single schema and fill out default values", () => {
-      const doc1 = Cambria.init({ schema: "projectv1" });
-
-      const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
-
       let doc = Frontend.init();
-      doc = Frontend.applyPatch(doc, patch2);
+      doc = Frontend.applyPatch(doc, initialPatch);
 
       assert.deepEqual(doc, {
         created_at: "",
@@ -357,18 +351,9 @@ describe("Has basic schema tools", () => {
     });
 
     it("can accept a real change", () => {
-      let frontend = Frontend.init(ACTOR_ID_1);
-      let initPatch, change;
-
-      // establish a cambria backend with a v1 schema
-      let cambria = Cambria.init({ schema: "projectv1" });
-      [cambria, initPatch] = Cambria.applyChanges(cambria, [V1Lens]);
-
-      // sync a frontend to it and produce a meaningful change
-      frontend = Frontend.applyPatch(frontend, initPatch);
-      [frontend, change] = Frontend.change(frontend, (doc: any) => {
-        doc.details.title = "hello";
-      });
+      const [, change] = Frontend.change(frontend, (doc: any) => { 
+        doc.details.title = 'hello' 
+      })
 
       // wrap that change in Cambria details
       const [, editPatch] = Cambria.applyChanges(cambria, [
@@ -380,9 +365,9 @@ describe("Has basic schema tools", () => {
       ]);
 
       // confirm the resulting patch is correct!
-      frontend = Frontend.applyPatch(frontend, editPatch);
+      const patchedFrontend = Frontend.applyPatch(frontend, editPatch)
 
-      assert.deepEqual(frontend, {
+      assert.deepEqual(patchedFrontend, {
         created_at: "",
         details: {
           title: "hello",
@@ -390,59 +375,26 @@ describe("Has basic schema tools", () => {
         },
       });
     });
-
+    
     it("can apply a change from another V1", () => {
-<<<<<<< HEAD
-      let frontendV1 = Frontend.init(ACTOR_ID_1);
-      let initPatch, change;
+      // Apply a V1 change to a full-fledged backend and read it successfully
+      const [, change] = Frontend.change(v1Frontend, (doc: any) => { 
+        doc.details.name = 'hello' 
+      })
 
-      // Write a realistic V1 change.
-      // establish a cambria backend with a v1 schema
-      let cambriaV1 = Cambria.init({ schema: "projectv1", lenses: [V1Lens] });
+      const [, patch] = Cambria.applyChanges(cambria, [{
+        kind: "change" as const,
+        schema: "project-v1",
+        change: change
+      }])
 
-      // FIXME: this is grody -- we should do this automatically during Cambria.applyLocalChanges
-      [cambriaV1, initPatch] = Cambria.applyChanges(cambriaV1, []);
-
-      // sync a frontend to it and produce a meaningful change
-      frontendV1 = Frontend.applyPatch(frontendV1, initPatch);
-      [frontendV1, change] = Frontend.change(frontendV1, (doc: any) => {
-        doc.details.title = "hello";
-      });
-
-      const cambriaChange = [
-        {
-          kind: "change" as const,
-          schema: "projectv1",
-          change: change,
-        },
-      ];
-
-      // wrap that change in Cambria details
-      const [, editPatch] = Cambria.applyChanges(cambriaV1, cambriaChange);
-
-=======
->>>>>>> rewrite a bunch of the tests
-      // Apply a V1 change to a V2 backend and read it successfully
-      // establish a cambria backend with a v2 schema
-      let cambriaV2 = Cambria.init({
-        schema: "projectv2",
-        lenses: [V1Lens, V2Lens],
-      });
       let frontendV2 = Frontend.init(ACTOR_ID_2);
-
-      let v2Patch;
-
-      // FIXME: this is grody -- we should do this automatically during Cambria.applyLocalChanges
-      [cambriaV2, v2Patch] = Cambria.applyChanges(cambriaV2, []);
-      frontendV2 = Frontend.applyPatch(frontendV2, v2Patch);
-
-      [cambriaV2, v2Patch] = Cambria.applyChanges(cambriaV2, cambriaChange);
-      frontendV2 = Frontend.applyPatch(frontendV2, v2Patch);
+      frontendV2 = Frontend.applyPatch(frontendV2, patch);
 
       assert.deepEqual(frontendV2, {
         created_at: "",
         details: {
-          name: "hello",
+          title: "hello",
           summary: "",
         },
       });
@@ -454,9 +406,9 @@ describe("Has basic schema tools", () => {
 
       // Write a realistic V1 change.
       // establish a cambria backend with a v1 schema
-      let cambriaV1 = Cambria.init({ schema: "projectv1", lenses: [V1Lens] });
+      let cambriaV1 = Cambria.init({ schema: "projectv1", lenses: [InitialLensChange] })
       // the above line should probably read:
-      // let [cambriaV1, initPatch] = Cambria.init({ schema: "projectv1", lenses: [V1Lens] })
+      // let [cambriaV1, initPatch] = Cambria.init({ schema: "projectv1", lenses: [InitialLensChange] })
 
       // sync a frontend to it and produce a meaningful change
       frontendV1 = Frontend.applyPatch(frontendV1, initPatch);
@@ -474,14 +426,14 @@ describe("Has basic schema tools", () => {
     });
 
     it("can convert a rename inside an object", () => {
-      const doc1 = Cambria.init({
+      const cambria = Cambria.init({
         schema: "projectv2",
-        lenses: [V1Lens, V2Lens],
+        lenses: [InitialLensChange, RenameNestedLensChange],
       });
 
-      const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
-
-      const [doc3, patch3] = Cambria.applyChanges(doc2, [
+      // barf: this next line
+      const [cambria2, initPatch] = Cambria.applyChanges(cambria, [])
+      const [, patch] = Cambria.applyChanges(cambria2, [
         {
           kind: "change" as const,
           schema: "projectv1",
@@ -493,7 +445,7 @@ describe("Has basic schema tools", () => {
             ops: [
               {
                 action: "set" as const,
-                obj: patch2.diffs[0].obj,
+                obj: initPatch.diffs[0].obj,
                 key: "title",
                 value: "hello",
               },
@@ -503,8 +455,7 @@ describe("Has basic schema tools", () => {
       ]);
 
       let doc = Frontend.init();
-      doc = Frontend.applyPatch(doc, patch2);
-      doc = Frontend.applyPatch(doc, patch3);
+      doc = Frontend.applyPatch(doc, patch);
 
       assert.deepEqual(doc, {
         created_at: "",
@@ -518,12 +469,12 @@ describe("Has basic schema tools", () => {
     it("can plunge a property", () => {
       const doc1 = Cambria.init({
         schema: "project-plunge-createdat",
-        lenses: [V1Lens, V2Lens, PlungeLens],
+        lenses: [InitialLensChange, PlungeLensChange],
       });
 
-      const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
+      const [doc2, patch2] = Cambria.applyChanges(doc1, []);
 
-      const [doc3, patch3] = Cambria.applyChanges(doc1, [
+      const [doc3, patch3] = Cambria.applyChanges(doc2, [
         {
           kind: "change" as const,
           schema: "projectv1",
@@ -567,10 +518,10 @@ describe("Has basic schema tools", () => {
 
       const doc1 = Cambria.init({
         schema: "project-hoist-title",
-        lenses: [V1Lens, V2Lens, hoistLens],
+        lenses: [InitialLensChange, hoistLens],
       });
 
-      const [doc2, patch2] = Cambria.applyChanges(doc1, [V1Lens]);
+      const [doc2, patch2] = Cambria.applyChanges(doc1, [InitialLensChange]);
 
       const [doc3, patch3] = Cambria.applyChanges(doc1, [
         {
@@ -766,7 +717,7 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    it.only("can write and read with an unrelated lens conversion", () => {
+    it("can write and read with an unrelated lens conversion", () => {
       // this lens has nothing to do with arrays but still pushes the patch thru cloudina
       const arrayV2Lens = {
         kind: "lens" as const,
@@ -844,7 +795,7 @@ describe("Has basic schema tools", () => {
     // notes from orion:
     // -getPath needs to do this too
   });
-*/
+
   // lists
   // - default values
   // - no lens
