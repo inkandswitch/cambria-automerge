@@ -222,11 +222,14 @@ function convertOp(
   const lensStack = lensFromTo(lensGraph, from.schema, to.schema);
   const jsonschema7 = lensGraphSchema(lensGraph, from.schema);
   const patch = opToPatch(op, from, elemCache);
+  console.log({ patch });
   const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
+  console.log({ convertedPatch });
   // todo: optimization idea:
   // if cloudina didn't do anything (convertedPatch deepEquals patch)
   // then we should just be able to set convertedOps = [op]
   const convertedOps = patchToOps(convertedPatch, change, index, to);
+  console.log({ convertedOps });
 
   // a convenient debug print to see the pipeline:
   // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
@@ -443,6 +446,7 @@ function patchToOps(
       // todo: in the below code, we need to resolve array indexes to element ids
       // (maybe some of it can happen in getObjId? consider array indexes
       // at intermediate points in the path)
+      console.log({ path: patchop.path });
       let path_parts = patchop.path.split("/");
       let key = path_parts.pop();
       let obj_path = path_parts.join("/");
@@ -453,7 +457,7 @@ function patchToOps(
         if (key === undefined || parseInt(key) === NaN) {
           throw new Error(`Expected array index on path ${patchop.path}`);
         }
-        key = findElemOfIndex(instance.state, objId, parseInt(key));
+        key = findElemOfIndex(instance.state, objId, parseInt(key) - 1);
       }
 
       if (objId === undefined)
@@ -497,11 +501,14 @@ export function buildPath(
   let obj = op.obj;
   let path: string[] = getPath(instance.state, obj) || [];
   let key = op.key;
-  if (op.key && Object.keys(elemCache).includes(op.key)) {
-    const insertKey = elemCache[op.key].key;
-    if (insertKey === undefined) throw new Error("expected key on insert op");
-    const arrayIndex = findIndexOfElem(instance.state, obj, insertKey) + 1;
-    delete elemCache[op.key];
+  if (getObjType(instance.state, obj) === "list") {
+    if (key === undefined) throw new Error("expected key on op");
+    if (Object.keys(elemCache).includes(key)) {
+      key = elemCache[key].key;
+      if (key === undefined) throw new Error("expected key on insert op");
+      delete elemCache[key];
+    }
+    const arrayIndex = findIndexOfElem(instance.state, obj, key) + 1;
     key = String(arrayIndex);
   }
   const finalPath = "/" + [...path, key].join("/");
@@ -525,6 +532,8 @@ function findIndexOfElem(
 
 // given an automerge instance, an array obj id, and an index, return the elem ID
 function findElemOfIndex(state: any, objId: ObjectId, index: number): string {
+  if (index === -1) return "_head";
+
   const elemId = state
     .getIn(["opSet", "byObject", objId, "_elemIds"])
     .keyOf(index); // todo: is this the right way to look for an index in SkipList?
