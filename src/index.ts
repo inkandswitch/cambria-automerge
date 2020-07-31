@@ -307,7 +307,6 @@ function convertChange(
     // After we convert this op, we need to incrementally apply it
     // to our instances so that we can do path-objId resolution using
     // these instances
-    console.log("incrementally applying ops to instances");
     from = applyOps(from, [op], block.change.actor);
     to = applyOps(to, convertedOps, block.change.actor);
   }
@@ -373,6 +372,7 @@ function applySchemaChanges(
     instance.bootstrapped = true;
   }
 
+  console.log("about to apply the final constructed change");
   const [newInstance, patch] = applyChangesToInstance(instance, changesToApply);
 
   return [newInstance, patch, lensGraph];
@@ -518,6 +518,7 @@ export function buildPath(
   let obj = op.obj;
   let path: string[] = getPath(instance.state, obj) || [];
   let key = op.key;
+  let arrayIndex;
   if (getObjType(instance.state, obj) === "list") {
     if (key === undefined) throw new Error("expected key on op");
     // if the key is in the elem cache (ie, inserted earlier in this change), look there.
@@ -527,8 +528,10 @@ export function buildPath(
       if (prevKey === undefined) throw new Error("expected key on insert op");
       delete elemCache[key];
       key = prevKey;
+      arrayIndex = findIndexOfElem(instance.state, obj, key) + 1;
+    } else {
+      arrayIndex = findIndexOfElem(instance.state, obj, key);
     }
-    const arrayIndex = findIndexOfElem(instance.state, obj, key) + 1;
     key = String(arrayIndex);
   }
   const finalPath = "/" + [...path, key].join("/");
@@ -659,7 +662,7 @@ function applyChangesToInstance(
   instance: Instance,
   changes: Change[]
 ): [Instance, AutomergePatch] {
-  // console.log(`applying changes to ${instance.schema}`, deepInspect(changes));
+  console.log(`applying changes to ${instance.schema}`, deepInspect(changes));
   const [backendState, patch] = Backend.applyChanges(instance.state, changes);
 
   return [
