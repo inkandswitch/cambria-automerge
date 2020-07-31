@@ -217,8 +217,9 @@ function convertOp(
   lensGraph: LensGraph,
   elemCache: ElemCache
 ): Op[] {
-  // return [change.ops[index]];
   const op = change.ops[index];
+  console.log("\n convertOp pipeline:");
+  console.log({ from: from.schema, to: to.schema, op });
   const lensStack = lensFromTo(lensGraph, from.schema, to.schema);
   const jsonschema7 = lensGraphSchema(lensGraph, from.schema);
   const patch = opToPatch(op, from, elemCache);
@@ -228,13 +229,12 @@ function convertOp(
   // todo: optimization idea:
   // if cloudina didn't do anything (convertedPatch deepEquals patch)
   // then we should just be able to set convertedOps = [op]
+
   const convertedOps = patchToOps(convertedPatch, change, index, to);
   console.log({ convertedOps });
 
   // a convenient debug print to see the pipeline:
   // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
-  // console.log("\nCONVERSION PIPELINE:");
-  console.log({ op, patch, convertedPatch, convertedOps });
 
   return convertedOps;
 }
@@ -273,15 +273,18 @@ function getInstanceAt(
 
 function convertChange(
   block: AutomergeChange,
-  from_instance: Instance,
-  to_instance: Instance,
+  fromInstance: Instance,
+  toInstance: Instance,
   lensGraph: LensGraph
 ): Change {
   const ops: Op[] = [];
-  let seq = block.change.seq;
-
-  from_instance = { ...from_instance };
-  to_instance = { ...to_instance };
+  // copy the from and to instances locally to ensure we don't mutate them.
+  // we're going to play these instances forward locally here as we apply the ops,
+  // but then we'll throw that out and just return a change which will be
+  // applied by the caller of this function to the toInstance.
+  // todo: is this unnecessary?
+  let from = { ...fromInstance };
+  let to = { ...toInstance };
 
   // cache array insert ops by the elem that they created
   // (cache is change-scoped because we assume insert+set combinations are within same change)
@@ -294,24 +297,19 @@ function convertChange(
       // add the elem to cache
       elemCache[`${block.change.actor}:${op.elem}`] = op;
 
-      // we don't actually want to pass the insert op through cloudina conversion--
-      // the later set op that actually sets a value will be converted
-      convertedOps = [op];
-    } else {
-      convertedOps = convertOp(
-        block.change,
-        i,
-        from_instance,
-        to_instance,
-        lensGraph,
-        elemCache
-      );
+      // apply the discarded insert to the from instance before we skip conversion
+      from = applyOps(from, [op], block.change.actor);
+      continue;
     }
+    convertedOps = convertOp(block.change, i, from, to, lensGraph, elemCache);
     ops.push(...convertedOps);
-    from_instance = applyOps(from_instance, [op], block.change.actor);
-    to_instance = applyOps(to_instance, convertedOps, block.change.actor);
 
-    seq += 1;
+    // After we convert this op, we need to incrementally apply it
+    // to our instances so that we can do path-objId resolution using
+    // these instances
+    console.log("incrementally applying ops to instances");
+    from = applyOps(from, [op], block.change.actor);
+    to = applyOps(to, convertedOps, block.change.actor);
   }
 
   const change = {
@@ -353,6 +351,7 @@ function applySchemaChanges(
         lensGraph,
         history
       );
+
       const newChange = convertChange(
         block,
         from_instance,
@@ -446,7 +445,6 @@ function patchToOps(
       // todo: in the below code, we need to resolve array indexes to element ids
       // (maybe some of it can happen in getObjId? consider array indexes
       // at intermediate points in the path)
-      console.log({ path: patchop.path });
       let path_parts = patchop.path.split("/");
       let key = path_parts.pop();
       let obj_path = path_parts.join("/");
@@ -457,7 +455,26 @@ function patchToOps(
         if (key === undefined || parseInt(key) === NaN) {
           throw new Error(`Expected array index on path ${patchop.path}`);
         }
-        key = findElemOfIndex(instance.state, objId, parseInt(key) - 1);
+        const originalOp = origin.ops[opIndex];
+        const opKey = originalOp.key;
+
+        if (patchop.op === "add") {
+          const insertAfter = findElemOfIndex(
+            instance.state,
+            objId,
+            parseInt(key) - 1
+          );
+          if (opKey === undefined)
+            throw new Error(`expected key on op: ${originalOp}`);
+          const insertElemId = parseInt(opKey.split(":")[1]);
+          acc.push({
+            action: "ins",
+            obj: objId,
+            key: insertAfter,
+            elem: insertElemId,
+          });
+        }
+        key = opKey;
       }
 
       if (objId === undefined)
@@ -608,9 +625,11 @@ export function opToPatch(
 ): CloudinaPatch {
   switch (op.action) {
     case "set": {
+      // if the elemCache has the key, we're processing an insert
+      const action = op.key && elemCache[op.key] ? "add" : "replace";
       const path = buildPath(op, instance, elemCache);
       const { value } = op;
-      const action = "replace";
+
       return [{ op: action, path, value }];
     }
     case "del": {
@@ -639,7 +658,7 @@ function applyChangesToInstance(
   instance: Instance,
   changes: Change[]
 ): [Instance, AutomergePatch] {
-  console.log("applying", deepInspect(changes), instance.schema);
+  console.log(`applying changes to ${instance.schema}`, deepInspect(changes));
   const [backendState, patch] = Backend.applyChanges(instance.state, changes);
 
   return [
@@ -657,15 +676,14 @@ function applyChangesToInstance(
 function applyOps(
   instance: Instance,
   ops: Op[],
-  actorId?: string,
-  seq?: number
+  actor: string = CAMBRIA_MAGIC_ACTOR
 ): Instance {
   // construct a change out of the ops
   const change = {
     ops,
     message: "",
-    actor: actorId || CAMBRIA_MAGIC_ACTOR,
-    seq: seq || (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0) + 1,
+    actor: actor,
+    seq: (instance.clock[actor] || 0) + 1,
     deps: instance.deps,
   };
 

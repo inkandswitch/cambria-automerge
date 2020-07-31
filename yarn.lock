@@ -397,10 +397,8 @@ atob@^2.1.2:
   resolved "https://registry.yarnpkg.com/atob/-/atob-2.1.2.tgz#6d9517eb9e030d2436666651e86bd9f6f13533c9"
   integrity sha512-Wm6ukoaOGJi/73p/cl2GvLjTI5JM1k/O14isD73YML8StrH/7/lRFgmg8nICZgD3bZZvjwCGxtMOD3wWNAu8cg==
 
-automerge@0.14.1:
+"automerge@file:../automerge":
   version "0.14.1"
-  resolved "https://registry.yarnpkg.com/automerge/-/automerge-0.14.1.tgz#ba127917bd660bb68fd6a438d8d5f5ab49f5a60b"
-  integrity sha512-9UtszKSqxVxXesbHxS6Wv7fPjmImawIlHzKs0O1DC5zcS4cMHB5eDeP6D/rVh5z4nMLfYSWSl2UufR7cvN3JnQ==
   dependencies:
     immutable "^3.8.2"
     transit-immutable-js "^0.7.0"
