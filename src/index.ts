@@ -89,7 +89,7 @@ export function applyChanges(
 export function applyLocalChange(
   doc: CambriaBackend,
   request: Change
-): [CambriaBackend, AutomergePatch, CambriaBlock ] {
+): [CambriaBackend, AutomergePatch, CambriaBlock] {
   const [patch, block] = doc.applyLocalChange(request)
   return [doc, patch, block]
 }
@@ -254,15 +254,15 @@ function convertChange(
   fromInstance: Instance,
   toInstance: Instance,
   lensState: LensState
-): Change {
+): [Change, Instance, Instance] {
   const ops: Op[] = []
   // copy the from and to instances locally to ensure we don't mutate them.
   // we're going to play these instances forward locally here as we apply the ops,
   // but then we'll throw that out and just return a change which will be
   // applied by the caller of this function to the toInstance.
   // todo: is this unnecessary?
-  let from = { ...fromInstance }
-  let to = { ...toInstance }
+  // let from = { ...fromInstance }
+  // let toInstance = { ...toInstance }
 
   // cache array insert ops by the elem that they created
   // (cache is change-scoped because we assume insert+set combinations are within same change)
@@ -274,17 +274,17 @@ function convertChange(
       elemCache[`${block.change.actor}:${op.elem}`] = op
 
       // apply the discarded insert to the from instance before we skip conversion
-      from = applyOps(from, [op], block.change.actor)
+      fromInstance = applyOps(fromInstance, [op], block.change.actor)
       return
     }
-    const convertedOps = convertOp(block.change, i, from, to, lensState, elemCache)
+    const convertedOps = convertOp(block.change, i, fromInstance, toInstance, lensState, elemCache)
     ops.push(...convertedOps)
 
     // After we convert this op, we need to incrementally apply it
     // to our instances so that we can do path-objId resolution using
     // these instances
-    from = applyOps(from, [op], block.change.actor)
-    to = applyOps(to, convertedOps, block.change.actor)
+    fromInstance = applyOps(fromInstance, [op], block.change.actor)
+    toInstance = applyOps(toInstance, convertedOps, block.change.actor)
   })
 
   const change = {
@@ -295,7 +295,7 @@ function convertChange(
     deps: block.change.deps, // todo: does this make sense? I think so?
   }
 
-  return change
+  return [change, fromInstance, toInstance]
 }
 
 // write a change to the instance,
@@ -309,6 +309,8 @@ function applySchemaChanges(
   history: CambriaBlock[]
 ): [Instance, AutomergePatch, LensState] {
   const changesToApply: Change[] = []
+  let fromInstance
+  let toInstance
 
   for (const block of blocks) {
     for (const lens of block.lenses) {
@@ -323,15 +325,27 @@ function applySchemaChanges(
     if (block.schema === instance.schema) {
       changesToApply.push(block.change)
     } else {
-      const [fromInstance] = getInstanceAt(
-        block.schema,
-        block.change.actor,
-        block.change.seq,
-        lensState,
-        history
-      )
+      fromInstance =
+        fromInstance ||
+        getInstanceAt(block.schema, block.change.actor, block.change.seq, lensState, history)[0]
 
-      const newChange = convertChange(block, fromInstance, instance, lensState)
+      // copy our main instance before passing into convertChange;
+      // convertChange is going to incrementally play ops into the copy
+      // we also need to bootstrap it before starting to incrementally apply ops
+      toInstance = toInstance || { ...instance }
+      if (!toInstance.bootstrapped) {
+        const bootstrapChange = bootstrap(toInstance, lensState)
+        ;[toInstance] = applyChangesToInstance(toInstance, [bootstrapChange])
+        toInstance.bootstrapped = true
+      }
+
+      let newChange
+      ;[newChange, fromInstance, toInstance] = convertChange(
+        block,
+        fromInstance,
+        toInstance,
+        lensState
+      )
       changesToApply.push(newChange)
     }
   }

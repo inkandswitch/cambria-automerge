@@ -722,8 +722,6 @@ describe('Has basic schema tools', () => {
         lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
       })
 
-      Cambria.getPatch(v2state1)
-
       // this fails becuase we don't carry our incremental op instances across blocks
       const [v2state2] = Cambria.applyChanges(v2state1, [block2, block3])
 
