@@ -5,15 +5,9 @@ import {
   registerLens,
   lensGraphSchema,
   lensFromTo,
-  lensGraphSchemas,
 } from 'cloudina/dist/lens-graph'
 
 import { v5 } from 'uuid'
-
-const MAGIC_UUID = 'f1bb7a0b-2d26-48ca-aaa3-92c63bbb5c50'
-
-type ObjectId = string
-type ObjectType = 'list' | 'object'
 
 // This import doesn't pull in types for the Backend functions,
 // maybe because we're importing from a non-root file?
@@ -24,6 +18,11 @@ import { JSONSchema7 } from 'json-schema'
 import { Patch as CloudinaPatch, LensSource, applyLensToPatch } from 'cloudina'
 
 import { inspect } from 'util'
+
+const MAGIC_UUID = 'f1bb7a0b-2d26-48ca-aaa3-92c63bbb5c50'
+
+type ObjectId = string
+type ObjectType = 'list' | 'object'
 
 // applyPatch PATCH needs to become - buildChange
 // buildChange needs to incrementally track op state re 'make' - list 'insert' 'del'
@@ -37,14 +36,8 @@ function deepInspect(object: any) {
   return inspect(object, false, null, true)
 }
 
-const emptySchema = {
-  $schema: 'http://json-schema.org/draft-07/schema',
-  type: 'object' as const,
-  additionalProperties: false,
-}
-
 export interface LensState {
-  inDoc: Set<string>,
+  inDoc: Set<string>
   graph: LensGraph
 }
 
@@ -57,7 +50,7 @@ export interface Instance {
   state: BackendState
 }
 
-//export type CambriaBlock = AutomergeChange | RegisteredLens
+// export type CambriaBlock = AutomergeChange | RegisteredLens
 
 type ElemCache = { [key: string]: Op }
 
@@ -76,9 +69,9 @@ export interface CambriaBlock {
 export type InitOptions = {
   schema: string
   lenses: RegisteredLens[]
-  //actorId?: string
-  //deferActorId?: boolean
-  //freeze?: boolean
+  // actorId?: string
+  // deferActorId?: boolean
+  // freeze?: boolean
 }
 
 export function init(options: InitOptions): CambriaBackend {
@@ -97,13 +90,11 @@ export function applyLocalChange(
   doc: CambriaBackend,
   request: Change
 ): [CambriaBackend, AutomergePatch] {
-  let [ patch, _block ] = doc.applyLocalChange(request)
+  const [patch] = doc.applyLocalChange(request)
   return [doc, patch]
 }
 
-export function getPatch(
-  doc: CambriaBackend
-): AutomergePatch {
+export function getPatch(doc: CambriaBackend): AutomergePatch {
   return doc.getPatch()
 }
 
@@ -113,9 +104,13 @@ export function getChanges(doc: CambriaBackend, haveDeps: Clock): CambriaBlock[]
 
 export class CambriaBackend {
   schema: string
+
   history: CambriaBlock[]
+
   lenses: RegisteredLens[]
+
   lensState: LensState
+
   private instances: { [schema: string]: Instance }
 
   constructor({ schema = 'mu', lenses = [] }: InitOptions) {
@@ -128,33 +123,33 @@ export class CambriaBackend {
       graph: lenses.reduce<LensGraph>(
         (graph, lens) => registerLens(graph, lens.from, lens.to, lens.lens),
         initLensGraph()
-      )
+      ),
     }
   }
 
-  applyLocalChange(request: Change): [ AutomergePatch, CambriaBlock ]  {
-    let lenses : RegisteredLens[] = []
+  applyLocalChange(request: Change): [AutomergePatch, CambriaBlock] {
+    let lenses: RegisteredLens[] = []
 
     if (!this.lensState.inDoc.has(this.schema)) {
       lenses = this.lenses // todo - dont have to put them ALL in
-      this.lensState.inDoc = this.lensState.inDoc.union(Set( this.lenses.map(l => l.to)))
+      this.lensState.inDoc = this.lensState.inDoc.union(Set(this.lenses.map((l) => l.to)))
     }
 
     const block = {
       schema: this.schema,
       lenses,
-      change: request
+      change: request,
     }
 
     const instance = this.getInstance(this.schema)
 
-    this.history.push(block);
+    this.history.push(block)
 
-    const [newState, patch] = Backend.applyLocalChange(instance.state, request);
+    const [newState, patch] = Backend.applyLocalChange(instance.state, request)
 
     instance.state = newState
 
-    return [ patch, block ]
+    return [patch, block]
   }
 
   getPatch(): AutomergePatch {
@@ -169,7 +164,7 @@ export class CambriaBackend {
   applyChanges(blocks: CambriaBlock[]): AutomergePatch {
     this.history.push(...blocks)
     const instance: Instance = this.getInstance(this.schema)
-    const history = this.history
+    const { history } = this
     const [newInstance, patch, newLensState] = applySchemaChanges(
       blocks,
       instance,
@@ -243,7 +238,7 @@ function getInstanceAt(
   history: CambriaBlock[]
 ): [Instance, LensState] {
   const blockIndex = history.findIndex(
-    (block) => block.change.actor === actorId && block.change.seq == seq
+    (block) => block.change.actor === actorId && block.change.seq === seq
   )
 
   if (blockIndex === -1)
@@ -253,7 +248,7 @@ function getInstanceAt(
 
   // todo: make sure we set default values even if lens not in doc
   const empty = initInstance(schema)
-  const [instance, _, newGraph] = applySchemaChanges(blocksToApply, empty, lensState, history)
+  const [instance, , newGraph] = applySchemaChanges(blocksToApply, empty, lensState, history)
   return [instance, newGraph]
 }
 
@@ -276,18 +271,16 @@ function convertChange(
   // (cache is change-scoped because we assume insert+set combinations are within same change)
   const elemCache: ElemCache = {}
 
-  for (let i = 0; i < block.change.ops.length; i++) {
-    const op = block.change.ops[i]
-    let convertedOps
+  block.change.ops.forEach((op, i) => {
     if (op.action === 'ins') {
       // add the elem to cache
       elemCache[`${block.change.actor}:${op.elem}`] = op
 
       // apply the discarded insert to the from instance before we skip conversion
       from = applyOps(from, [op], block.change.actor)
-      continue
+      return
     }
-    convertedOps = convertOp(block.change, i, from, to, lensState, elemCache)
+    const convertedOps = convertOp(block.change, i, from, to, lensState, elemCache)
     ops.push(...convertedOps)
 
     // After we convert this op, we need to incrementally apply it
@@ -295,7 +288,7 @@ function convertChange(
     // these instances
     from = applyOps(from, [op], block.change.actor)
     to = applyOps(to, convertedOps, block.change.actor)
-  }
+  })
 
   const change = {
     ops,
@@ -317,22 +310,23 @@ function applySchemaChanges(
   instance: Instance,
   lensState: LensState,
   history: CambriaBlock[]
-): [Instance, AutomergePatch, LensState ] {
+): [Instance, AutomergePatch, LensState] {
   const changesToApply: Change[] = []
 
-  for (let block of blocks) {
-    for (let lens of block.lenses) { // FIXME
+  for (const block of blocks) {
+    for (const lens of block.lenses) {
+      // FIXME
       const oldInDoc = lensState.inDoc
       lensState = {
         inDoc: oldInDoc.add(lens.to),
-        graph: registerLens(lensState.graph, lens.from, lens.to, lens.lens)
+        graph: registerLens(lensState.graph, lens.from, lens.to, lens.lens),
       }
     }
 
     if (block.schema === instance.schema) {
       changesToApply.push(block.change)
     } else {
-      const [from_instance, _] = getInstanceAt(
+      const [fromInstance] = getInstanceAt(
         block.schema,
         block.change.actor,
         block.change.seq,
@@ -340,7 +334,7 @@ function applySchemaChanges(
         history
       )
 
-      const newChange = convertChange(block, from_instance, instance, lensState)
+      const newChange = convertChange(block, fromInstance, instance, lensState)
       changesToApply.push(newChange)
     }
   }
@@ -385,13 +379,12 @@ function patchToOps(
   opIndex: number,
   instance: Instance
 ): Op[] {
-  const opCache = {}
-  const pathCache = { ['']: ROOT_ID }
+  const pathCache = { '': ROOT_ID }
   // todo: see if we can refactor to have TS tell us what's missing here
   const ops = patch
     .map((patchop, i) => {
       const acc: Op[] = []
-      let makeObj = v5(`${origin.actor}:${origin.seq}:${opIndex}:${i}"`, MAGIC_UUID)
+      const makeObj = v5(`${origin.actor}:${origin.seq}:${opIndex}:${i}"`, MAGIC_UUID)
       let action
       if (patchop.op === 'remove') {
         action = 'del'
@@ -419,23 +412,23 @@ function patchToOps(
       // todo: in the below code, we need to resolve array indexes to element ids
       // (maybe some of it can happen in getObjId? consider array indexes
       // at intermediate points in the path)
-      let path_parts = patchop.path.split('/')
-      let key = path_parts.pop()
-      let obj_path = path_parts.join('/')
+      const pathParts = patchop.path.split('/')
+      let key = pathParts.pop()
+      const objPath = pathParts.join('/')
 
-      const objId = getObjId(instance.state, obj_path) || pathCache[obj_path]
+      const objId = getObjId(instance.state, objPath) || pathCache[objPath]
 
       if (getObjType(instance.state, objId) === 'list') {
-        if (key === undefined || parseInt(key) === NaN) {
+        if (key === undefined || Number.isNaN(parseInt(key, 10))) {
           throw new Error(`Expected array index on path ${patchop.path}`)
         }
         const originalOp = origin.ops[opIndex]
         const opKey = originalOp.key
 
         if (patchop.op === 'add') {
-          const insertAfter = findElemOfIndex(instance.state, objId, parseInt(key) - 1)
+          const insertAfter = findElemOfIndex(instance.state, objId, parseInt(key, 10) - 1)
           if (opKey === undefined) throw new Error(`expected key on op: ${originalOp}`)
-          const insertElemId = parseInt(opKey.split(':')[1])
+          const insertElemId = parseInt(opKey.split(':')[1], 10)
           acc.push({
             action: 'ins',
             obj: objId,
@@ -446,7 +439,7 @@ function patchToOps(
         key = opKey
       }
 
-      if (objId === undefined) throw new Error(`Could not find object with path ${obj_path}`)
+      if (objId === undefined) throw new Error(`Could not find object with path ${objPath}`)
 
       if (action === 'link') {
         const op = { action, obj: objId, key, value: makeObj }
@@ -465,23 +458,10 @@ function patchToOps(
   return ops
 }
 
-function parseOpId(opid: string): { counter: number; actor: string } {
-  const regex = /^([0-9.]+)@(.*)$/
-  const match = regex.exec(opid)
-  if (match == null) {
-    throw new RangeError(`Invalid OpId ${opid}`)
-  }
-  const counter = parseFloat(match[1])
-  const actor = match[2]
-  return { counter, actor }
-}
-
 export function buildPath(op: Op, instance: Instance, elemCache: ElemCache): string {
-  const backendState: any = instance.state
-  const opSet = backendState.state
-  let obj = op.obj
-  let path: string[] = getPath(instance.state, obj) || []
-  let key = op.key
+  const { obj } = op
+  const path: string[] = getPath(instance.state, obj) || []
+  let { key } = op
   let arrayIndex
   if (getObjType(instance.state, obj) === 'list') {
     if (key === undefined) throw new Error('expected key on op')
@@ -498,7 +478,7 @@ export function buildPath(op: Op, instance: Instance, elemCache: ElemCache): str
     }
     key = String(arrayIndex)
   }
-  const finalPath = '/' + [...path, key].join('/')
+  const finalPath = `/${[...path, key].join('/')}`
   return finalPath
 }
 
@@ -559,7 +539,7 @@ function getObjType(state: any, objId: ObjectId): ObjectType {
 
 function getPath(state: any, obj: string): string[] | null {
   const opSet = state.get('opSet')
-  let path: string[] = []
+  const path: string[] = []
   while (obj !== ROOT_ID) {
     const ref = opSet.getIn(['byObject', obj, '_inbound'], Set()).first()
     if (!ref) return null
@@ -597,17 +577,6 @@ export function opToPatch(op: Op, instance: Instance, elemCache: ElemCache): Clo
   }
 }
 
-function calcDeps(change: Change, deps: Clock): Clock {
-  const newDeps = {}
-  for (const actor in deps) {
-    if (deps[actor] > (change.deps[actor] || 0)) {
-      newDeps[actor] = deps[actor]
-    }
-  }
-  newDeps[change.actor] = change.seq
-  return newDeps
-}
-
 function applyChangesToInstance(instance: Instance, changes: Change[]): [Instance, AutomergePatch] {
   // console.log(`applying changes to ${instance.schema}`, deepInspect(changes));
   const [backendState, patch] = Backend.applyChanges(instance.state, changes)
@@ -629,11 +598,11 @@ function applyOps(instance: Instance, ops: Op[], actor: string = CAMBRIA_MAGIC_A
   const change = {
     ops,
     message: '',
-    actor: actor,
+    actor,
     seq: (instance.clock[actor] || 0) + 1,
     deps: instance.deps,
   }
 
-  const [newInstance, _] = applyChangesToInstance(instance, [change])
+  const [newInstance] = applyChangesToInstance(instance, [change])
   return newInstance
 }
