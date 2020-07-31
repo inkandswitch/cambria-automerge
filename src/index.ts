@@ -43,6 +43,11 @@ const emptySchema = {
   additionalProperties: false,
 }
 
+export interface LensState {
+  inDoc: Set<string>,
+  graph: LensGraph
+}
+
 export interface Instance {
   clock: Clock
   schema: string
@@ -52,111 +57,109 @@ export interface Instance {
   state: BackendState
 }
 
-export type CambriaBlock = AutomergeChange | RegisteredLens
+//export type CambriaBlock = AutomergeChange | RegisteredLens
 
 type ElemCache = { [key: string]: Op }
 
 export interface RegisteredLens {
-  kind: 'lens'
   to: string
   from: string
   lens: LensSource
 }
 
-export interface AutomergeChange {
-  kind: 'change'
+export interface CambriaBlock {
   schema: string
+  lenses: RegisteredLens[]
   change: Change
 }
 
 export type InitOptions = {
-  actorId?: string
-  schema?: string
-  lenses?: RegisteredLens[]
-  deferActorId?: boolean
-  freeze?: boolean
+  schema: string
+  lenses: RegisteredLens[]
+  //actorId?: string
+  //deferActorId?: boolean
+  //freeze?: boolean
 }
 
-export function init(options: InitOptions = {}): CambriaState {
-  return new CambriaState(options)
+export function init(options: InitOptions): CambriaBackend {
+  return new CambriaBackend(options)
 }
 
 export function applyChanges(
-  doc: CambriaState,
+  doc: CambriaBackend,
   changes: CambriaBlock[]
-): [CambriaState, AutomergePatch] {
+): [CambriaBackend, AutomergePatch] {
   const patch = doc.applyChanges(changes)
   return [doc, patch]
 }
 
 export function applyLocalChange(
-  doc: CambriaState,
+  doc: CambriaBackend,
   request: Change
-): [CambriaState, AutomergePatch] {
-  let patch = doc.applyLocalChange(request)
+): [CambriaBackend, AutomergePatch] {
+  let [ patch, _block ] = doc.applyLocalChange(request)
   return [doc, patch]
 }
 
-export function getChanges(doc: CambriaState, haveDeps: Clock): CambriaBlock[] {
+export function getPatch(
+  doc: CambriaBackend
+): AutomergePatch {
+  return doc.getPatch()
+}
+
+export function getChanges(doc: CambriaBackend, haveDeps: Clock): CambriaBlock[] {
   return doc.getChanges(haveDeps)
 }
 
-export class CambriaState {
+export class CambriaBackend {
   schema: string
   history: CambriaBlock[]
-  lensGraph: LensGraph
+  lenses: RegisteredLens[]
+  lensState: LensState
   private instances: { [schema: string]: Instance }
 
   constructor({ schema = 'mu', lenses = [] }: InitOptions) {
     this.schema = schema
     this.history = []
     this.instances = {}
-    this.lensGraph = lenses.reduce<LensGraph>(
-      (graph, lens) => registerLens(graph, lens.from, lens.to, lens.lens),
-      initLensGraph()
-    )
+    this.lenses = lenses
+    this.lensState = {
+      inDoc: Set(),
+      graph: lenses.reduce<LensGraph>(
+        (graph, lens) => registerLens(graph, lens.from, lens.to, lens.lens),
+        initLensGraph()
+      )
+    }
   }
 
-  applyLocalChange(request: Change): AutomergePatch {
-    /*
-    const instance = this.instances[this.schema];
+  applyLocalChange(request: Change): [ AutomergePatch, CambriaBlock ]  {
+    let lenses : RegisteredLens[] = []
 
-    if (instance === undefined) {
-      throw new RangeError(
-        `cant apply change - no instance for '${this.schema}'`
-      );
+    if (!this.lensState.inDoc.has(this.schema)) {
+      lenses = this.lenses // todo - dont have to put them ALL in
+      this.lensState.inDoc = this.lensState.inDoc.union(Set( this.lenses.map(l => l.to)))
     }
 
-    const oldDeps = instance.deps;
-
-    const [state, patch] = Backend.applyLocalChange(instance.state, request);
-
-    const changes = Backend.getChanges(state, oldDeps);
-
-    if (changes.length !== 1) {
-      throw new RangeError(
-        `apply local changes produced invalid (${changes.length}) changes`
-      );
-    }
-
-    const change: Change = changes[0];
-    const block: AutomergeChange = {
-      kind: "change",
+    const block = {
       schema: this.schema,
-      change,
-      // FIXME hash // deps // actor
-    };
+      lenses,
+      change: request
+    }
+
+    const instance = this.getInstance(this.schema)
 
     this.history.push(block);
-    this.applySchemaChanges([block]);
 
-    return patch;
-     */
-    throw new RangeError('unimplemented')
+    const [newState, patch] = Backend.applyLocalChange(instance.state, request);
+
+    instance.state = newState
+
+    return [ patch, block ]
   }
 
-  reset() {
-    this.instances = {}
+  getPatch(): AutomergePatch {
+    this.applyChanges([]) // trigger the bootstrap block if need be
+    return Backend.getPatch(this.getInstance(this.schema).state)
   }
 
   // take a change and apply it everywhere
@@ -167,14 +170,14 @@ export class CambriaState {
     this.history.push(...blocks)
     const instance: Instance = this.getInstance(this.schema)
     const history = this.history
-    const [newInstance, patch, newLensGraph] = applySchemaChanges(
+    const [newInstance, patch, newLensState] = applySchemaChanges(
       blocks,
       instance,
-      this.lensGraph,
+      this.lensState,
       history
     )
     this.instances[this.schema] = newInstance
-    this.lensGraph = newLensGraph
+    this.lensState = newLensState
     return patch
   }
 
@@ -207,14 +210,14 @@ function convertOp(
   index: number,
   from: Instance,
   to: Instance,
-  lensGraph: LensGraph,
+  lensState: LensState,
   elemCache: ElemCache
 ): Op[] {
   const op = change.ops[index]
   // console.log("\n convertOp pipeline:");
   // console.log({ from: from.schema, to: to.schema, op });
-  const lensStack = lensFromTo(lensGraph, from.schema, to.schema)
-  const jsonschema7 = lensGraphSchema(lensGraph, from.schema)
+  const lensStack = lensFromTo(lensState.graph, from.schema, to.schema)
+  const jsonschema7 = lensGraphSchema(lensState.graph, from.schema)
   const patch = opToPatch(op, from, elemCache)
   // console.log({ patch });
   const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7)
@@ -236,11 +239,11 @@ function getInstanceAt(
   schema: string,
   actorId: string,
   seq: number,
-  graph: LensGraph,
+  lensState: LensState,
   history: CambriaBlock[]
-): [Instance, LensGraph] {
+): [Instance, LensState] {
   const blockIndex = history.findIndex(
-    (block) => block.kind === 'change' && block.change.actor === actorId && block.change.seq == seq
+    (block) => block.change.actor === actorId && block.change.seq == seq
   )
 
   if (blockIndex === -1)
@@ -250,15 +253,15 @@ function getInstanceAt(
 
   // todo: make sure we set default values even if lens not in doc
   const empty = initInstance(schema)
-  const [instance, _, newGraph] = applySchemaChanges(blocksToApply, empty, graph, history)
+  const [instance, _, newGraph] = applySchemaChanges(blocksToApply, empty, lensState, history)
   return [instance, newGraph]
 }
 
 function convertChange(
-  block: AutomergeChange,
+  block: CambriaBlock,
   fromInstance: Instance,
   toInstance: Instance,
-  lensGraph: LensGraph
+  lensState: LensState
 ): Change {
   const ops: Op[] = []
   // copy the from and to instances locally to ensure we don't mutate them.
@@ -284,7 +287,7 @@ function convertChange(
       from = applyOps(from, [op], block.change.actor)
       continue
     }
-    convertedOps = convertOp(block.change, i, from, to, lensGraph, elemCache)
+    convertedOps = convertOp(block.change, i, from, to, lensState, elemCache)
     ops.push(...convertedOps)
 
     // After we convert this op, we need to incrementally apply it
@@ -312,15 +315,18 @@ function convertChange(
 function applySchemaChanges(
   blocks: CambriaBlock[],
   instance: Instance,
-  lensGraph: LensGraph,
+  lensState: LensState,
   history: CambriaBlock[]
-): [Instance, AutomergePatch, LensGraph] {
+): [Instance, AutomergePatch, LensState ] {
   const changesToApply: Change[] = []
 
   for (let block of blocks) {
-    if (block.kind === 'lens') {
-      lensGraph = registerLens(lensGraph, block.from, block.to, block.lens)
-      continue
+    for (let lens of block.lenses) { // FIXME
+      const oldInDoc = lensState.inDoc
+      lensState = {
+        inDoc: oldInDoc.add(lens.to),
+        graph: registerLens(lensState.graph, lens.from, lens.to, lens.lens)
+      }
     }
 
     if (block.schema === instance.schema) {
@@ -330,22 +336,18 @@ function applySchemaChanges(
         block.schema,
         block.change.actor,
         block.change.seq,
-        lensGraph,
+        lensState,
         history
       )
 
-      const newChange = convertChange(block, from_instance, instance, lensGraph)
+      const newChange = convertChange(block, from_instance, instance, lensState)
       changesToApply.push(newChange)
     }
   }
 
   if (!instance.bootstrapped) {
-    const bootstrapChange = bootstrap(instance, lensGraph)
+    const bootstrapChange = bootstrap(instance, lensState)
 
-    // console.log(
-    //   deepInspect({ schema: instance.schema, change: bootstrapChange })
-    // );
-    // console.log("bootstrapChange", bootstrapChange);
     changesToApply.unshift(bootstrapChange)
     instance.bootstrapped = true
   }
@@ -353,12 +355,12 @@ function applySchemaChanges(
   // console.log("about to apply the final constructed change");
   const [newInstance, patch] = applyChangesToInstance(instance, changesToApply)
 
-  return [newInstance, patch, lensGraph]
+  return [newInstance, patch, lensState]
 }
 
-function bootstrap(instance: Instance, lensGraph: LensGraph): Change {
+function bootstrap(instance: Instance, lensState: LensState): Change {
   const urOp = [{ op: 'add' as const, path: '', value: {} }]
-  const jsonschema7: JSONSchema7 = lensGraphSchema(lensGraph, instance.schema)
+  const jsonschema7: JSONSchema7 = lensGraphSchema(lensState.graph, instance.schema)
   if (jsonschema7 === undefined) {
     throw new Error(`Could not find JSON schema for schema ${instance.schema}`)
   }
