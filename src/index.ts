@@ -217,23 +217,23 @@ function convertOp(
   lensGraph: LensGraph,
   elemCache: ElemCache
 ): Op[] {
-  return [change.ops[index]];
-  // const op = change.ops[index];
-  // const lensStack = lensFromTo(lensGraph, from.schema, to.schema);
-  // const jsonschema7 = lensGraphSchema(lensGraph, from.schema);
-  // const patch = opToPatch(op, from, elemCache);
-  // const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
-  // // todo: optimization idea:
-  // // if cloudina didn't do anything (convertedPatch deepEquals patch)
-  // // then we should just be able to set convertedOps = [op]
-  // const convertedOps = patchToOps(convertedPatch, change, index, to);
+  // return [change.ops[index]];
+  const op = change.ops[index];
+  const lensStack = lensFromTo(lensGraph, from.schema, to.schema);
+  const jsonschema7 = lensGraphSchema(lensGraph, from.schema);
+  const patch = opToPatch(op, from, elemCache);
+  const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
+  // todo: optimization idea:
+  // if cloudina didn't do anything (convertedPatch deepEquals patch)
+  // then we should just be able to set convertedOps = [op]
+  const convertedOps = patchToOps(convertedPatch, change, index, to);
 
-  // // a convenient debug print to see the pipeline:
-  // // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
-  // // console.log("\nCONVERSION PIPELINE:");
-  // console.log({ op, patch, convertedPatch, convertedOps });
+  // a convenient debug print to see the pipeline:
+  // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
+  // console.log("\nCONVERSION PIPELINE:");
+  console.log({ op, patch, convertedPatch, convertedOps });
 
-  // return convertedOps;
+  return convertedOps;
 }
 
 function getInstanceAt(
@@ -275,6 +275,7 @@ function convertChange(
   lensGraph: LensGraph
 ): Change {
   const ops: Op[] = [];
+  let seq = block.change.seq;
 
   from_instance = { ...from_instance };
   to_instance = { ...to_instance };
@@ -304,8 +305,10 @@ function convertChange(
       );
     }
     ops.push(...convertedOps);
-    from_instance = applyOps(from_instance, [op]);
-    to_instance = applyOps(to_instance, convertedOps);
+    from_instance = applyOps(from_instance, [op], block.change.actor);
+    to_instance = applyOps(to_instance, convertedOps, block.change.actor);
+
+    seq += 1;
   }
 
   const change = {
@@ -625,11 +628,7 @@ function applyChangesToInstance(
   instance: Instance,
   changes: Change[]
 ): [Instance, AutomergePatch] {
-  console.log(
-    "applying",
-    changes.map((c) => c.ops),
-    instance.schema
-  );
+  console.log("applying", deepInspect(changes), instance.schema);
   const [backendState, patch] = Backend.applyChanges(instance.state, changes);
 
   return [
@@ -644,13 +643,18 @@ function applyChangesToInstance(
   ];
 }
 
-function applyOps(instance: Instance, ops: Op[]): Instance {
+function applyOps(
+  instance: Instance,
+  ops: Op[],
+  actorId?: string,
+  seq?: number
+): Instance {
   // construct a change out of the ops
   const change = {
     ops,
     message: "",
-    actor: CAMBRIA_MAGIC_ACTOR,
-    seq: (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0) + 1,
+    actor: actorId || CAMBRIA_MAGIC_ACTOR,
+    seq: seq || (instance.clock[CAMBRIA_MAGIC_ACTOR] || 0) + 1,
     deps: instance.deps,
   };
 
