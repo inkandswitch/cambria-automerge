@@ -807,7 +807,7 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    it.only("can write and read with an unrelated lens conversion", () => {
+    it("can write and read with an unrelated lens conversion", () => {
       // this lens has nothing to do with arrays but still pushes the patch thru cloudina
       const arrayV2Lens = {
         kind: "lens" as const,

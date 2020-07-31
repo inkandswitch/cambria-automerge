@@ -368,7 +368,7 @@ function applySchemaChanges(
     // console.log(
     //   deepInspect({ schema: instance.schema, change: bootstrapChange })
     // );
-    console.log("bootstrapChange", bootstrapChange);
+    // console.log("bootstrapChange", bootstrapChange);
     changesToApply.unshift(bootstrapChange);
     instance.bootstrapped = true;
   }
@@ -658,7 +658,7 @@ function applyChangesToInstance(
   instance: Instance,
   changes: Change[]
 ): [Instance, AutomergePatch] {
-  console.log(`applying changes to ${instance.schema}`, deepInspect(changes));
+  // console.log(`applying changes to ${instance.schema}`, deepInspect(changes));
   const [backendState, patch] = Backend.applyChanges(instance.state, changes);
 
   return [
