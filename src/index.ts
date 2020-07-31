@@ -209,20 +209,20 @@ function convertOp(
   elemCache: ElemCache
 ): Op[] {
   const op = change.ops[index]
-  console.log('\n convertOp pipeline:')
-  console.log({ from: from.schema, to: to.schema, op })
+  // console.log('\n convertOp pipeline:')
+  // console.log({ from: from.schema, to: to.schema, op })
   const lensStack = lensFromTo(lensState.graph, from.schema, to.schema)
   const jsonschema7 = lensGraphSchema(lensState.graph, from.schema)
   const patch = opToPatch(op, from, elemCache)
-  console.log({ patch })
+  // console.log({ patch })
   const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7)
-  console.log({ convertedPatch })
+  // console.log({ convertedPatch })
   // todo: optimization idea:
   // if cloudina didn't do anything (convertedPatch deepEquals patch)
   // then we should just be able to set convertedOps = [op]
 
   const convertedOps = patchToOps(convertedPatch, change, index, to)
-  console.log({ convertedOps })
+  // console.log({ convertedOps })
 
   return convertedOps
 }
@@ -249,6 +249,32 @@ function getInstanceAt(
   return [instance, newGraph]
 }
 
+// returns a change with list of ops sorted in the order we'd like to process them.
+// currently only does one thing:
+// for each array insertion, puts the 'set' immediately after its corresponding 'ins'.
+function sortOps(change: Change): Change {
+  const originalOps = [...change.ops]
+  const sortedOps: Op[] = []
+
+  for (const op of originalOps) {
+    sortedOps.push(op)
+
+    // for an insert, we add the op, followed by its corresponding set op
+    if (op.action === 'ins') {
+      const setOp = originalOps.find(
+        (o) => o.action === 'set' && o.key === `${change.actor}:${op.elem}`
+      )
+      if (!setOp) throw new Error(`expected to find set op corresponding to ins op: ${op}`)
+
+      // add the set op after the insert, and remove from the original list
+      sortedOps.push(setOp)
+      originalOps.splice(originalOps.indexOf(setOp), 1)
+    }
+  }
+
+  return { ...change, ops: sortedOps }
+}
+
 function convertChange(
   block: CambriaBlock,
   fromInstance: Instance,
@@ -268,7 +294,9 @@ function convertChange(
   // (cache is change-scoped because we assume insert+set combinations are within same change)
   const elemCache: ElemCache = {}
 
-  block.change.ops.forEach((op, i) => {
+  const sortedChange = sortOps(block.change)
+
+  sortedChange.ops.forEach((op, i) => {
     if (op.action === 'ins') {
       // add the elem to cache
       elemCache[`${block.change.actor}:${op.elem}`] = op
@@ -277,7 +305,7 @@ function convertChange(
       fromInstance = applyOps(fromInstance, [op], block.change.actor)
       return
     }
-    const convertedOps = convertOp(block.change, i, fromInstance, toInstance, lensState, elemCache)
+    const convertedOps = convertOp(sortedChange, i, fromInstance, toInstance, lensState, elemCache)
     ops.push(...convertedOps)
 
     // After we convert this op, we need to incrementally apply it
