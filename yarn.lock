@@ -425,7 +425,7 @@ cliui@^5.0.0:
 
 "cloudina@ssh://git@github.com:inkandswitch/cloudina.git":
   version "0.1.0"
-  resolved "ssh://git@github.com:inkandswitch/cloudina.git#947b2e7fa148e5066ccbe9bd171591e8b53aa94c"
+  resolved "ssh://git@github.com:inkandswitch/cloudina.git#866fc38e9f9c1140b78af2d28becb54a74ef6110"
   dependencies:
     commander "^5.1.0"
     fast-json-patch "^3.0.0-1"

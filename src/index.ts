@@ -5,7 +5,10 @@ import {
   registerLens,
   lensGraphSchema,
   lensFromTo,
-} from 'cloudina/dist/lens-graph'
+  Patch as CloudinaPatch,
+  LensSource,
+  applyLensToPatch,
+} from 'cloudina'
 
 import { v5 } from 'uuid'
 
@@ -14,8 +17,6 @@ import { v5 } from 'uuid'
 import { Backend, Op, Clock, Change, Patch as AutomergePatch, BackendState } from 'automerge'
 
 import { JSONSchema7 } from 'json-schema'
-
-import { Patch as CloudinaPatch, LensSource, applyLensToPatch } from 'cloudina'
 
 import { inspect } from 'util'
 
