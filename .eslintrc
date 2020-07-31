@@ -8,6 +8,7 @@
     "__static": true
   },
   "parser": "@typescript-eslint/parser",
+  "parserOptions": { "project": "./tsconfig.json" },
   "plugins": [],
   "extends": [
     "airbnb-typescript",
@@ -50,23 +51,6 @@
     // third-party libs often use this
     "no-underscore-dangle": "off",
 
-    // we agreed this is a bad rule
-    "react/destructuring-assignment": "off",
-
-    // we agreed this is gratuitous
-    "react/jsx-one-expression-per-line": "off",
-
-    // pushpin was inherently visual, so we've disabled quite a few accessibility rules
-    // it would be reasonable to re-enable these but would take some work, and might be
-    // a good idea for an app like arthropod
-    "jsx-a11y/no-static-element-interactions": "off",
-    "jsx-a11y/anchor-is-valid": "off",
-    "jsx-a11y/interactive-supports-focus": "off",
-    "jsx-a11y/no-noninteractive-tabindex": "off",
-    "jsx-a11y/click-events-have-key-events": "off",
-    "jsx-a11y/no-autofocus": "off",
-    "jsx-a11y/media-has-caption": "off", // randomly sourced audio doesn't come captioned
-
     // This isn't really useful
     "@typescript-eslint/no-empty-interface": "off",
 
@@ -92,10 +76,6 @@
         "args": "none"
       }
     ],
-
-    "react-hooks/rules-of-hooks": "error",
-    // this rule caused bugs when it was automatically applied
-    "react-hooks/exhaustive-deps": "off",
 
     // import-specific rulings
     // we probably want to enable this, and it's violated 23 times
