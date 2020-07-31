@@ -217,22 +217,23 @@ function convertOp(
   lensGraph: LensGraph,
   elemCache: ElemCache
 ): Op[] {
-  const op = change.ops[index];
-  const lensStack = lensFromTo(lensGraph, from.schema, to.schema);
-  const jsonschema7 = lensGraphSchema(lensGraph, from.schema);
-  const patch = opToPatch(op, from, elemCache);
-  const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
-  // todo: optimization idea:
-  // if cloudina didn't do anything (convertedPatch deepEquals patch)
-  // then we should just be able to set convertedOps = [op]
-  const convertedOps = patchToOps(convertedPatch, change, index, to);
+  return [change.ops[index]];
+  // const op = change.ops[index];
+  // const lensStack = lensFromTo(lensGraph, from.schema, to.schema);
+  // const jsonschema7 = lensGraphSchema(lensGraph, from.schema);
+  // const patch = opToPatch(op, from, elemCache);
+  // const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7);
+  // // todo: optimization idea:
+  // // if cloudina didn't do anything (convertedPatch deepEquals patch)
+  // // then we should just be able to set convertedOps = [op]
+  // const convertedOps = patchToOps(convertedPatch, change, index, to);
 
-  // a convenient debug print to see the pipeline:
-  // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
-  // console.log("\nCONVERSION PIPELINE:");
-  console.log({ op, patch, convertedPatch, convertedOps });
+  // // a convenient debug print to see the pipeline:
+  // // original automerge op -> json patch -> cloudina converted json patch -> new automerge op
+  // // console.log("\nCONVERSION PIPELINE:");
+  // console.log({ op, patch, convertedPatch, convertedOps });
 
-  return convertedOps;
+  // return convertedOps;
 }
 
 function getInstanceAt(
@@ -362,7 +363,7 @@ function applySchemaChanges(
     // console.log(
     //   deepInspect({ schema: instance.schema, change: bootstrapChange })
     // );
-
+    console.log("bootstrapChange", bootstrapChange);
     changesToApply.unshift(bootstrapChange);
     instance.bootstrapped = true;
   }
@@ -624,6 +625,11 @@ function applyChangesToInstance(
   instance: Instance,
   changes: Change[]
 ): [Instance, AutomergePatch] {
+  console.log(
+    "applying",
+    changes.map((c) => c.ops),
+    instance.schema
+  );
   const [backendState, patch] = Backend.applyChanges(instance.state, changes);
 
   return [
