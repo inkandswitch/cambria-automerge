@@ -523,9 +523,10 @@ export function buildPath(
     // if the key is in the elem cache (ie, inserted earlier in this change), look there.
     // otherwise we can just find the key in the
     if (Object.keys(elemCache).includes(key)) {
-      key = elemCache[key].key;
-      if (key === undefined) throw new Error("expected key on insert op");
+      const prevKey = elemCache[key].key;
+      if (prevKey === undefined) throw new Error("expected key on insert op");
       delete elemCache[key];
+      key = prevKey;
     }
     const arrayIndex = findIndexOfElem(instance.state, obj, key) + 1;
     key = String(arrayIndex);

@@ -807,7 +807,7 @@ describe("Has basic schema tools", () => {
       });
     });
 
-    it("can write and read with an unrelated lens conversion", () => {
+    it.only("can write and read with an unrelated lens conversion", () => {
       // this lens has nothing to do with arrays but still pushes the patch thru cloudina
       const arrayV2Lens = {
         kind: "lens" as const,
@@ -846,24 +846,24 @@ describe("Has basic schema tools", () => {
 
               // insert "bug" as the second element
               // (commented out to simplify for now)
-              // {
-              //   action: "ins",
-              //   obj: arrayObjId,
-              //   key: `${ACTOR_ID_1}:1`,
-              //   elem: 2,
-              // },
-              // {
-              //   action: "set",
-              //   obj: arrayObjId,
-              //   key: `${ACTOR_ID_1}:2`,
-              //   value: "bug",
-              // },
-              // {
-              //   action: "set",
-              //   obj: arrayObjId,
-              //   key: `${ACTOR_ID_1}:2`,
-              //   value: "defect",
-              // },
+              {
+                action: "ins",
+                obj: arrayObjId,
+                key: `${ACTOR_ID_1}:1`,
+                elem: 2,
+              },
+              {
+                action: "set",
+                obj: arrayObjId,
+                key: `${ACTOR_ID_1}:2`,
+                value: "bug",
+              },
+              {
+                action: "set",
+                obj: arrayObjId,
+                key: `${ACTOR_ID_1}:2`,
+                value: "defect",
+              },
             ],
           },
         },
@@ -874,7 +874,7 @@ describe("Has basic schema tools", () => {
       doc = Frontend.applyPatch(doc, patch3);
 
       assert.deepEqual(doc, {
-        tags: ["feature"],
+        tags: ["feature", "defect"],
         other: "",
       });
     });
