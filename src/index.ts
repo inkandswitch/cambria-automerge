@@ -178,8 +178,7 @@ export class CambriaBackend {
   }
 
   getChanges(haveDeps: Clock): CambriaBlock[] {
-    // FIXME - todo
-    return []
+    return this.history.filter((block) => !lessOrEqual(block.change.clock, haveDeps))
   }
 
   private getInstance(schema: string): Instance {
@@ -645,4 +644,10 @@ function applyOps(instance: Instance, ops: Op[], actor: string = CAMBRIA_MAGIC_A
 
   const [newInstance] = applyChangesToInstance(instance, [change])
   return newInstance
+}
+
+function lessOrEqual(clock1 : Clock, clock2 : Clock) : boolean {
+  return Object.keys(clock1).concat(Object.keys(clock2)).reduce(
+    (result, key) => (result && (clock1[key] || 0) <= (clock2[key] || 0)),
+    true)
 }
