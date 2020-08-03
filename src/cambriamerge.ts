@@ -63,7 +63,7 @@ export interface CambriaBlock {
   schema: string
   lenses: RegisteredLens[]
   change: Change
-  actor: string,
+  actor: string
   seq: number
 }
 
@@ -73,13 +73,13 @@ export interface MiniBlock {
   change: Change
 }
 
-export function mkBlock(mini: MiniBlock) : CambriaBlock {
+export function mkBlock(mini: MiniBlock): CambriaBlock {
   return {
     schema: mini.schema,
     change: mini.change,
     lenses: mini.lenses || [],
     actor: mini.change.actor,
-    seq: mini.change.seq
+    seq: mini.change.seq,
   }
 }
 
@@ -100,8 +100,12 @@ export function applyChanges(
   changes: CambriaBlock[]
 ): [CambriaBackend, AutomergePatch] {
   const patch = doc.applyChanges(changes)
-  if (patch && patch.clock) { delete patch.clock[CAMBRIA_MAGIC_ACTOR] }
-  if (patch && patch.deps) { delete patch.deps[CAMBRIA_MAGIC_ACTOR] }
+  if (patch && patch.clock) {
+    delete patch.clock[CAMBRIA_MAGIC_ACTOR]
+  }
+  if (patch && patch.deps) {
+    delete patch.deps[CAMBRIA_MAGIC_ACTOR]
+  }
   return [doc, patch]
 }
 
@@ -110,15 +114,23 @@ export function applyLocalChange(
   request: Change
 ): [CambriaBackend, AutomergePatch, CambriaBlock] {
   const [patch, block] = doc.applyLocalChange(request)
-  if (patch && patch.clock) { delete patch.clock[CAMBRIA_MAGIC_ACTOR] }
-  if (patch && patch.deps) { delete patch.deps[CAMBRIA_MAGIC_ACTOR] }
+  if (patch && patch.clock) {
+    delete patch.clock[CAMBRIA_MAGIC_ACTOR]
+  }
+  if (patch && patch.deps) {
+    delete patch.deps[CAMBRIA_MAGIC_ACTOR]
+  }
   return [doc, patch, block]
 }
 
 export function getPatch(doc: CambriaBackend): AutomergePatch {
   const patch = doc.getPatch()
-  if (patch && patch.clock) { delete patch.clock[CAMBRIA_MAGIC_ACTOR] }
-  if (patch && patch.deps) { delete patch.deps[CAMBRIA_MAGIC_ACTOR] }
+  if (patch && patch.clock) {
+    delete patch.clock[CAMBRIA_MAGIC_ACTOR]
+  }
+  if (patch && patch.deps) {
+    delete patch.deps[CAMBRIA_MAGIC_ACTOR]
+  }
   return patch
 }
 
@@ -164,7 +176,7 @@ export class CambriaBackend {
       lenses,
       change: request,
       actor: request.actor,
-      seq: request.seq
+      seq: request.seq,
     }
 
     if (request.seq === 1) {
@@ -172,7 +184,7 @@ export class CambriaBackend {
     }
 
     let instance = this.getInstance(this.schema)
-    let bootdiffs : Diff[] = []
+    let bootdiffs: Diff[] = []
 
     this.history.push(block)
 
@@ -191,7 +203,7 @@ export class CambriaBackend {
 
     this.instances[this.schema] = instance
 
-    patch.diffs.unshift(... bootdiffs)
+    patch.diffs.unshift(...bootdiffs)
 
     return [patch, block]
   }
@@ -207,7 +219,7 @@ export class CambriaBackend {
 
   applyChanges(blocks: CambriaBlock[]): AutomergePatch {
     const instance: Instance = this.getInstance(this.schema)
-    let fBlocks = blocks.filter((block) => block.seq > (instance.clock[block.actor] || 0))
+    const fBlocks = blocks.filter((block) => block.seq > (instance.clock[block.actor] || 0))
     this.history.push(...fBlocks)
     const { history } = this
     const [newInstance, patch, newLensState] = applySchemaChanges(
