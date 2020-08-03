@@ -14,7 +14,7 @@ import { v5 } from 'uuid'
 
 // This import doesn't pull in types for the Backend functions,
 // maybe because we're importing from a non-root file?
-import { Backend, Op, Clock, Change, Patch as AutomergePatch, BackendState } from 'automerge'
+import { Diff, Backend, Op, Clock, Change, Patch as AutomergePatch, BackendState } from 'automerge'
 
 import { JSONSchema7 } from 'json-schema'
 
@@ -100,6 +100,8 @@ export function applyChanges(
   changes: CambriaBlock[]
 ): [CambriaBackend, AutomergePatch] {
   const patch = doc.applyChanges(changes)
+  if (patch && patch.clock) { delete patch.clock[CAMBRIA_MAGIC_ACTOR] }
+  if (patch && patch.deps) { delete patch.deps[CAMBRIA_MAGIC_ACTOR] }
   return [doc, patch]
 }
 
@@ -108,11 +110,16 @@ export function applyLocalChange(
   request: Change
 ): [CambriaBackend, AutomergePatch, CambriaBlock] {
   const [patch, block] = doc.applyLocalChange(request)
+  if (patch && patch.clock) { delete patch.clock[CAMBRIA_MAGIC_ACTOR] }
+  if (patch && patch.deps) { delete patch.deps[CAMBRIA_MAGIC_ACTOR] }
   return [doc, patch, block]
 }
 
 export function getPatch(doc: CambriaBackend): AutomergePatch {
-  return doc.getPatch()
+  const patch = doc.getPatch()
+  if (patch && patch.clock) { delete patch.clock[CAMBRIA_MAGIC_ACTOR] }
+  if (patch && patch.deps) { delete patch.deps[CAMBRIA_MAGIC_ACTOR] }
+  return patch
 }
 
 export function getChanges(doc: CambriaBackend, haveDeps: Clock): CambriaBlock[] {
@@ -160,13 +167,31 @@ export class CambriaBackend {
       seq: request.seq
     }
 
-    const instance = this.getInstance(this.schema)
+    if (request.seq === 1) {
+      request.deps[CAMBRIA_MAGIC_ACTOR] = 1
+    }
+
+    let instance = this.getInstance(this.schema)
+    let bootdiffs : Diff[] = []
 
     this.history.push(block)
+
+    if (!instance.bootstrapped) {
+      const bootstrapChange = bootstrap(instance, this.lensState)
+      const [newInstance, bootPatch] = applyChangesToInstance(instance, [bootstrapChange])
+      bootdiffs = bootPatch.diffs
+      instance = newInstance
+    }
 
     const [newState, patch] = Backend.applyLocalChange(instance.state, request)
 
     instance.state = newState
+    instance.clock = patch.clock || {}
+    instance.deps = patch.deps || {}
+
+    this.instances[this.schema] = instance
+
+    patch.diffs.unshift(... bootdiffs)
 
     return [patch, block]
   }
@@ -181,11 +206,12 @@ export class CambriaBackend {
   // take all changes and apply them in one place
 
   applyChanges(blocks: CambriaBlock[]): AutomergePatch {
-    this.history.push(...blocks)
     const instance: Instance = this.getInstance(this.schema)
+    let fBlocks = blocks.filter((block) => block.seq > (instance.clock[block.actor] || 0))
+    this.history.push(...fBlocks)
     const { history } = this
     const [newInstance, patch, newLensState] = applySchemaChanges(
-      blocks,
+      fBlocks,
       instance,
       this.lensState,
       history
@@ -642,7 +668,7 @@ function applyChangesToInstance(instance: Instance, changes: Change[]): [Instanc
     {
       clock: patch.clock || {},
       schema: instance.schema,
-      bootstrapped: instance.bootstrapped,
+      bootstrapped: true,
       deps: patch.deps || {},
       state: backendState,
     },

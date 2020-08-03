@@ -129,8 +129,9 @@ describe('Has basic schema tools', () => {
       doc.title = 'hello'
     })
 
-    const cambriaChange = mkBlock({ schema: 'project-rename', change })
-    const [, patch2] = Cambria.applyChanges(cambria, [cambriaChange])
+//    const cambriaChange = mkBlock({ schema: 'project-rename', change })
+    const [, patch2] = Cambria.applyLocalChange(cambria, change)
+//    const [, patch2] = Cambria.applyChanges(cambria, [cambriaChange])
 
     assert.deepEqual(patch2.diffs, [
       {
