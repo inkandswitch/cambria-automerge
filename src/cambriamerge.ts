@@ -264,21 +264,25 @@ function convertOp(
   lensState: LensState,
   elemCache: ElemCache
 ): Op[] {
+  // toggle this definition to toggle debug logging inside this function
+  // const debug = console.log
+  const debug = (str) => {}
+
   const op = change.ops[index]
-  // console.log('\n convertOp pipeline:')
-  // console.log({ from: from.schema, to: to.schema, op })
+  debug('\n convertOp pipeline:')
+  debug({ from: from.schema, to: to.schema, op })
   const lensStack = lensFromTo(lensState.graph, from.schema, to.schema)
   const jsonschema7 = lensGraphSchema(lensState.graph, from.schema)
   const patch = opToPatch(op, from, elemCache)
-  // console.log({ patch })
+  debug({ patch })
   const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7)
-  // console.log({ convertedPatch })
+  debug({ convertedPatch })
   // todo: optimization idea:
   // if cloudina didn't do anything (convertedPatch deepEquals patch)
   // then we should just be able to set convertedOps = [op]
 
   const convertedOps = patchToOps(convertedPatch, change, index, to)
-  // console.log({ convertedOps })
+  debug({ convertedOps })
 
   return convertedOps
 }
@@ -308,6 +312,8 @@ function getInstanceAt(
 // returns a change with list of ops sorted in the order we'd like to process them.
 // currently only does one thing:
 // for each array insertion, puts the 'set' immediately after its corresponding 'ins'.
+// TODO: consider insertions of objects or lists -- there are additional ops
+//   besides just the ins and set
 function sortOps(change: Change): Change {
   const originalOps = [...change.ops]
   const sortedOps: Op[] = []
@@ -326,6 +332,15 @@ function sortOps(change: Change): Change {
       sortedOps.push(setOp)
       originalOps.splice(originalOps.indexOf(setOp), 1)
     }
+
+    if (op.action === 'makeMap') {
+      const linkOp = originalOps.find((o) => o.action === 'link' && o.value === op.obj)
+      if (!linkOp) throw new Error(`expected to find link op corresponding to makeMap: ${op}`)
+
+      // add the set op after the insert, and remove from the original list
+      sortedOps.push(linkOp)
+      originalOps.splice(originalOps.indexOf(linkOp), 1)
+    }
   }
 
   return { ...change, ops: sortedOps }
@@ -342,9 +357,10 @@ function convertChange(
   // we're going to play these instances forward locally here as we apply the ops,
   // but then we'll throw that out and just return a change which will be
   // applied by the caller of this function to the toInstance.
-  // todo: is this unnecessary?
-  // let from = { ...fromInstance }
-  // let toInstance = { ...toInstance }
+  // TODO: determine whether this is actually necessary -- might not be since
+  // we do some copying at the layer above this
+  let fromInstanceClone = { ...fromInstance }
+  let toInstanceClone = { ...toInstance }
 
   // cache array insert ops by the elem that they created
   // (cache is change-scoped because we assume insert+set combinations are within same change)
@@ -357,18 +373,37 @@ function convertChange(
       // add the elem to cache
       elemCache[`${block.change.actor}:${op.elem}`] = op
 
-      // apply the discarded insert to the from instance before we skip conversion
-      fromInstance = applyOps(fromInstance, [op], block.change.actor)
+      // apply the discarded op to the from instance
+      // (todo: remove this but leave it for makemap and link?)
+      fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
       return
     }
-    const convertedOps = convertOp(sortedChange, i, fromInstance, toInstance, lensState, elemCache)
+    if (op.action === 'makeMap') {
+      // apply the discarded op to the from instance
+      fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
+
+      return
+    }
+    if (op.action === 'link') {
+      // apply the discarded op to the from instance
+      fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
+      return
+    }
+    const convertedOps = convertOp(
+      sortedChange,
+      i,
+      fromInstanceClone,
+      toInstanceClone,
+      lensState,
+      elemCache
+    )
     ops.push(...convertedOps)
 
     // After we convert this op, we need to incrementally apply it
     // to our instances so that we can do path-objId resolution using
     // these instances
-    fromInstance = applyOps(fromInstance, [op], block.change.actor)
-    toInstance = applyOps(toInstance, convertedOps, block.change.actor)
+    fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
+    toInstanceClone = applyOps(toInstanceClone, convertedOps, block.change.actor)
   })
 
   const change = {
@@ -379,7 +414,7 @@ function convertChange(
     deps: block.change.deps, // todo: does this make sense? I think so?
   }
 
-  return [change, fromInstance, toInstance]
+  return [change, fromInstanceClone, toInstanceClone]
 }
 
 // write a change to the instance,
@@ -673,7 +708,7 @@ export function opToPatch(op: Op, instance: Instance, elemCache: ElemCache): Clo
 }
 
 function applyChangesToInstance(instance: Instance, changes: Change[]): [Instance, AutomergePatch] {
-  // console.log(`applying changes to ${instance.schema}`, deepInspect(changes));
+  // console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
   const [backendState, patch] = Backend.applyChanges(instance.state, changes)
 
   return [
@@ -689,6 +724,7 @@ function applyChangesToInstance(instance: Instance, changes: Change[]): [Instanc
 }
 
 function applyOps(instance: Instance, ops: Op[], actor: string = CAMBRIA_MAGIC_ACTOR): Instance {
+  // console.log('applyOps', instance.schema, actor, instance.clock[actor])
   // construct a change out of the ops
   const change = {
     ops,

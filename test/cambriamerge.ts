@@ -186,20 +186,18 @@ describe('Has basic schema tools', () => {
     })
   })
 
-  it.skip('can handle writes from v1 and v2', () => {
+  it('can handle writes from v1 and v2', () => {
     const state1 = Cambria.init({
       schema: 'project-v1',
       lenses: [InitialLensChange, FillOutProjectLensChange],
     })
 
-    const [, nameChange] = Frontend.change(v1Frontend, (doc: any) => {
+    const [afterNameSet, nameChange] = Frontend.change(v1Frontend, (doc: any) => {
       doc.name = 'hello'
     })
-    const [, filloutChange] = Frontend.change(v1Frontend, (doc: any) => {
+    const [, filloutChange] = Frontend.change(afterNameSet, (doc: any) => {
       doc.details = { author: 'Peter' }
     })
-
-    console.log('frontend change', deepInspect(filloutChange))
 
     const [finalDoc] = Cambria.applyChanges(state1, [
       mkBlock({ schema: InitialLensChange.to, change: nameChange }),
@@ -208,7 +206,7 @@ describe('Has basic schema tools', () => {
 
     const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
     assert.deepEqual(frontend, {
-      name: 'actor 2 says hi',
+      name: 'hello',
       summary: '',
     })
   })
