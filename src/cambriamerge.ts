@@ -301,9 +301,8 @@ function convertChange(
   // we're going to play these instances forward locally here as we apply the ops,
   // but then we'll throw that out and just return a change which will be
   // applied by the caller of this function to the toInstance.
-  // todo: is this unnecessary?
-  // let from = { ...fromInstance }
-  // let toInstance = { ...toInstance }
+  let fromInstanceClone = { ...fromInstance }
+  let toInstanceClone = { ...toInstance }
 
   // cache array insert ops by the elem that they created
   // (cache is change-scoped because we assume insert+set combinations are within same change)
@@ -319,17 +318,17 @@ function convertChange(
       elemCache[`${block.change.actor}:${op.elem}`] = op
 
       // apply the discarded op to the from instance before we skip conversion
-      fromInstance = applyOps(fromInstance, [op], block.change.actor)
+      fromInstanceClone = applyOps(fromInstance, [op], block.change.actor)
       return
     }
     if (op.action === 'makeMap') {
       // apply the discarded op to the from instance before we skip conversion
-      fromInstance = applyOps(fromInstance, [op], block.change.actor)
+      fromInstanceClone = applyOps(fromInstance, [op], block.change.actor)
       return
     }
     if (op.action === 'link') {
       // apply the discarded op to the from instance before we skip conversion
-      fromInstance = applyOps(fromInstance, [op], block.change.actor)
+      fromInstanceClone = applyOps(fromInstance, [op], block.change.actor)
       return
     }
     const convertedOps = convertOp(sortedChange, i, fromInstance, toInstance, lensState, elemCache)
@@ -338,8 +337,8 @@ function convertChange(
     // After we convert this op, we need to incrementally apply it
     // to our instances so that we can do path-objId resolution using
     // these instances
-    fromInstance = applyOps(fromInstance, [op], block.change.actor)
-    toInstance = applyOps(toInstance, convertedOps, block.change.actor)
+    fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
+    toInstanceClone = applyOps(toInstanceClone, convertedOps, block.change.actor)
   })
 
   const change = {
@@ -350,7 +349,7 @@ function convertChange(
     deps: block.change.deps, // todo: does this make sense? I think so?
   }
 
-  return [change, fromInstance, toInstance]
+  return [change, fromInstanceClone, toInstanceClone]
 }
 
 // write a change to the instance,
@@ -660,6 +659,7 @@ function applyChangesToInstance(instance: Instance, changes: Change[]): [Instanc
 }
 
 function applyOps(instance: Instance, ops: Op[], actor: string = CAMBRIA_MAGIC_ACTOR): Instance {
+  console.log('applyOps', instance.schema, actor, instance.clock[actor])
   // construct a change out of the ops
   const change = {
     ops,
