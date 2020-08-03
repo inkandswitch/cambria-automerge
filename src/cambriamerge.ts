@@ -51,8 +51,6 @@ export interface Instance {
   state: BackendState
 }
 
-// export type CambriaBlock = AutomergeChange | RegisteredLens
-
 type ElemCache = { [key: string]: Op }
 
 export interface RegisteredLens {
@@ -65,6 +63,24 @@ export interface CambriaBlock {
   schema: string
   lenses: RegisteredLens[]
   change: Change
+  actor: string,
+  seq: number
+}
+
+export interface MiniBlock {
+  schema: string
+  lenses?: RegisteredLens[]
+  change: Change
+}
+
+export function mkBlock(mini: MiniBlock) : CambriaBlock {
+  return {
+    schema: mini.schema,
+    change: mini.change,
+    lenses: mini.lenses || [],
+    actor: mini.change.actor,
+    seq: mini.change.seq
+  }
 }
 
 export type InitOptions = {
@@ -140,6 +156,8 @@ export class CambriaBackend {
       schema: this.schema,
       lenses,
       change: request,
+      actor: request.actor,
+      seq: request.seq
     }
 
     const instance = this.getInstance(this.schema)

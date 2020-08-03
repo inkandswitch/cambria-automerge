@@ -4,6 +4,7 @@ import { addProperty, renameProperty, LensSource } from 'cloudina'
 import { Frontend } from 'automerge'
 import { inside, plungeProperty, removeProperty, hoistProperty } from 'cloudina/dist/helpers'
 import * as Cambria from '../src/index'
+import { mkBlock } from '../src/cambriamerge'
 
 const ACTOR_ID_1 = '111111'
 const ACTOR_ID_2 = '222222'
@@ -98,11 +99,9 @@ describe('Has basic schema tools', () => {
     const [, change] = Frontend.change(v1Frontend, (doc: any) => {
       doc.title = 'hello'
     })
-    const cambriaChange = {
-      schema: 'project-v1',
-      lenses: [],
-      change,
-    }
+    const cambriaChange = mkBlock({
+      schema: 'project-v1', change,
+    })
     const [, patch] = Cambria.applyChanges(v1Cambria, [cambriaChange])
 
     assert.deepEqual(patch.diffs, [
@@ -130,11 +129,7 @@ describe('Has basic schema tools', () => {
       doc.title = 'hello'
     })
 
-    const cambriaChange = {
-      schema: 'project-rename',
-      lenses: [],
-      change,
-    }
+    const cambriaChange = mkBlock({ schema: 'project-rename', change })
     const [, patch2] = Cambria.applyChanges(cambria, [cambriaChange])
 
     assert.deepEqual(patch2.diffs, [
@@ -169,11 +164,7 @@ describe('Has basic schema tools', () => {
     const [, change] = Frontend.change(v1Frontend, (doc: any) => {
       doc.name = 'hello'
     })
-    const cambriaChange = {
-      schema: 'project-v1',
-      lenses: [],
-      change,
-    }
+    const cambriaChange = mkBlock({ schema: 'project-v1', change })
 
     const [cambria] = Cambria.applyChanges(
       Cambria.init({ schema: LAST_SCHEMA, lenses: [...AllLensChanges, RenameLensChange] }),
@@ -209,12 +200,8 @@ describe('Has basic schema tools', () => {
     })
 
     const [finalDoc] = Cambria.applyChanges(state1, [
-      { schema: InitialLensChange.to, change: nameChange, lenses: [] },
-      {
-        schema: FillOutProjectLensChange.to,
-        change: filloutChange,
-        lenses: [],
-      },
+      mkBlock({ schema: InitialLensChange.to, change: nameChange }),
+      mkBlock({ schema: FillOutProjectLensChange.to, change: filloutChange })
     ])
 
     const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
@@ -239,12 +226,8 @@ describe('Has basic schema tools', () => {
     })
 
     const [finalDoc] = Cambria.applyChanges(state1, [
-      { schema: InitialLensChange.to, change: nameChange, lenses: [] },
-      {
-        schema: AllLensChanges.slice(-1)[0].to,
-        change: filloutChange,
-        lenses: [],
-      },
+      mkBlock({ schema: InitialLensChange.to, change: nameChange }),
+      mkBlock({ schema: AllLensChanges.slice(-1)[0].to, change: filloutChange })
     ])
 
     const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
@@ -270,12 +253,12 @@ describe('Has basic schema tools', () => {
     })
 
     const [finalDoc] = Cambria.applyChanges(state1, [
-      { schema: InitialLensChange.to, change: nameChange, lenses: [] },
-      {
+      mkBlock({ schema: InitialLensChange.to, change: nameChange }),
+      mkBlock({
         schema: FillOutProjectLensChange.to,
         lenses: [FillOutProjectLensChange],
         change: filloutChange,
-      },
+      }),
     ])
 
     const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
@@ -303,7 +286,7 @@ describe('Has basic schema tools', () => {
         doc.name = 'hello'
       })
       const [finalDoc] = Cambria.applyChanges(removeCambria, [
-        { schema: InitialLensChange.to, change: nameChange, lenses: [] },
+        mkBlock({ schema: InitialLensChange.to, change: nameChange }),
       ])
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
@@ -353,11 +336,10 @@ describe('Has basic schema tools', () => {
 
       // wrap that change in Cambria details
       const [finalDoc] = Cambria.applyChanges(cambria, [
-        {
+        mkBlock({
           schema: 'project-v2',
           change,
-          lenses: [],
-        },
+        }),
       ])
 
       // confirm the resulting patch is correct!
@@ -392,11 +374,10 @@ describe('Has basic schema tools', () => {
       )
 
       const [finalDoc] = Cambria.applyChanges(cambria, [
-        {
+        mkBlock({
           schema: 'project-v2',
           change,
-          lenses: [],
-        },
+        }),
       ])
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
@@ -428,11 +409,10 @@ describe('Has basic schema tools', () => {
       })
 
       const [finalDoc] = Cambria.applyChanges(cambria, [
-        {
+        mkBlock({
           schema: 'project-v2',
           change,
-          lenses: [],
-        },
+        }),
       ])
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
@@ -473,11 +453,10 @@ describe('Has basic schema tools', () => {
       })
 
       const [finalDoc] = Cambria.applyChanges(cambria, [
-        {
+        mkBlock({
           schema: 'project-filled-out',
           change,
-          lenses: [],
-        },
+        }),
       ])
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
@@ -519,11 +498,10 @@ describe('Has basic schema tools', () => {
       })
 
       const [finalCambria] = Cambria.applyChanges(cambria, [
-        {
+        mkBlock({
           schema: 'project-filled-out',
           change,
-          lenses: [],
-        },
+        }),
       ])
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalCambria))
@@ -583,9 +561,8 @@ describe('Has basic schema tools', () => {
       if (!branch2ObjId) throw new Error('expected to find objID for branch2 map')
 
       const [finalDoc] = Cambria.applyChanges(cambria, [
-        {
+        mkBlock({
           schema: 'nested-v1',
-          lenses: [],
           change: {
             message: '',
             actor: ACTOR_ID_1,
@@ -600,7 +577,7 @@ describe('Has basic schema tools', () => {
               },
             ],
           },
-        },
+        }),
       ])
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
@@ -668,7 +645,7 @@ describe('Has basic schema tools', () => {
         doc.tags.push('lovecraftian')
       })
 
-      const [cambria2] = Cambria.applyChanges(cambria, [{ schema: 'array-v1', change, lenses: [] }])
+      const [cambria2] = Cambria.applyChanges(cambria, [mkBlock({ schema: 'array-v1', change })])
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria2))
       assert.deepEqual(frontend, {
@@ -687,7 +664,7 @@ describe('Has basic schema tools', () => {
         doc.tags = ['maddening', 'infuriating', 'adorable']
       })
 
-      const [cambria2] = Cambria.applyChanges(cambria, [{ schema: 'array-v1', change, lenses: [] }])
+      const [cambria2] = Cambria.applyChanges(cambria, [mkBlock({ schema: 'array-v1', change })])
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria2))
       assert.deepEqual(frontend, {
@@ -749,7 +726,7 @@ describe('Has basic schema tools', () => {
       })
 
       const [, arrayPatch] = Cambria.applyChanges(doc1, [
-        { schema: 'array-v1', change, lenses: [] },
+        mkBlock({ schema: 'array-v1', change }),
       ])
 
       let doc = Frontend.applyPatch(Frontend.init(), initialPatch)
@@ -778,7 +755,7 @@ describe('Has basic schema tools', () => {
       })
 
       const [, arrayPatch] = Cambria.applyChanges(doc1, [
-        { schema: 'array-v1', change, lenses: [] },
+        mkBlock({ schema: 'array-v1', change }),
       ])
 
       let doc = Frontend.applyPatch(Frontend.init(), initialPatch)
