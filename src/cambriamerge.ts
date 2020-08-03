@@ -317,13 +317,14 @@ function convertChange(
       // add the elem to cache
       elemCache[`${block.change.actor}:${op.elem}`] = op
 
-      // apply the discarded op to the from instance before we skip conversion
+      // apply the discarded op to the from instance
       fromInstanceClone = applyOps(fromInstance, [op], block.change.actor)
       return
     }
     if (op.action === 'makeMap') {
       // apply the discarded op to the from instance before we skip conversion
       fromInstanceClone = applyOps(fromInstance, [op], block.change.actor)
+
       return
     }
     if (op.action === 'link') {
@@ -331,7 +332,14 @@ function convertChange(
       fromInstanceClone = applyOps(fromInstance, [op], block.change.actor)
       return
     }
-    const convertedOps = convertOp(sortedChange, i, fromInstance, toInstance, lensState, elemCache)
+    const convertedOps = convertOp(
+      sortedChange,
+      i,
+      fromInstanceClone,
+      toInstanceClone,
+      lensState,
+      elemCache
+    )
     ops.push(...convertedOps)
 
     // After we convert this op, we need to incrementally apply it
