@@ -195,9 +195,10 @@ describe('Has basic schema tools', () => {
       doc.name = 'hello'
     })
     const [, filloutChange] = Frontend.change(v1Frontend, (doc: any) => {
-      doc.details = {}
-      doc.details.author = 'Peter'
+      doc.details = { author: 'Peter' }
     })
+
+    console.log('frontend change', deepInspect(filloutChange))
 
     const [finalDoc] = Cambria.applyChanges(state1, [
       mkBlock({ schema: InitialLensChange.to, change: nameChange }),
@@ -239,6 +240,11 @@ describe('Has basic schema tools', () => {
   })
 
   it.skip('can convert data when necessary lens comes after the write', () => {
+    // Intent of this test is to exercise the case where lenses aren't registered
+    // upfront; a lens later in the op log needs to be used for a conversion earlier
+    // in the op log.
+    // We're deferring this test because depending on how we do lens registration
+    // this may not really be necessary functionality
     const state1 = Cambria.init({
       schema: 'project-filled-out',
       lenses: [InitialLensChange, FillOutProjectLensChange],
@@ -315,7 +321,7 @@ describe('Has basic schema tools', () => {
       })
     })
 
-    it.skip('can accept a real change', () => {
+    it('can accept a real change', () => {
       const [cambria] = Cambria.applyChanges(
         Cambria.init({ schema: LAST_SCHEMA, lenses: AllLensChanges }),
         []
