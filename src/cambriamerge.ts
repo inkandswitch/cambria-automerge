@@ -208,21 +208,25 @@ function convertOp(
   lensState: LensState,
   elemCache: ElemCache
 ): Op[] {
+  // toggle this definition to toggle debug logging inside this function
+  const debug = console.log
+  // const debug = () => {}
+
   const op = change.ops[index]
-  // console.log('\n convertOp pipeline:')
-  // console.log({ from: from.schema, to: to.schema, op })
+  debug('\n convertOp pipeline:')
+  debug({ from: from.schema, to: to.schema, op })
   const lensStack = lensFromTo(lensState.graph, from.schema, to.schema)
   const jsonschema7 = lensGraphSchema(lensState.graph, from.schema)
   const patch = opToPatch(op, from, elemCache)
-  // console.log({ patch })
+  debug({ patch })
   const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7)
-  // console.log({ convertedPatch })
+  debug({ convertedPatch })
   // todo: optimization idea:
   // if cloudina didn't do anything (convertedPatch deepEquals patch)
   // then we should just be able to set convertedOps = [op]
 
   const convertedOps = patchToOps(convertedPatch, change, index, to)
-  // console.log({ convertedOps })
+  debug({ convertedOps })
 
   return convertedOps
 }
@@ -252,6 +256,8 @@ function getInstanceAt(
 // returns a change with list of ops sorted in the order we'd like to process them.
 // currently only does one thing:
 // for each array insertion, puts the 'set' immediately after its corresponding 'ins'.
+// TODO: consider insertions of objects or lists -- there are additional ops
+//   besides just the ins and set
 function sortOps(change: Change): Change {
   const originalOps = [...change.ops]
   const sortedOps: Op[] = []
@@ -269,6 +275,15 @@ function sortOps(change: Change): Change {
       // add the set op after the insert, and remove from the original list
       sortedOps.push(setOp)
       originalOps.splice(originalOps.indexOf(setOp), 1)
+    }
+
+    if (op.action === 'makeMap') {
+      const linkOp = originalOps.find((o) => o.action === 'link' && o.value === op.obj)
+      if (!linkOp) throw new Error(`expected to find link op corresponding to makeMap: ${op}`)
+
+      // add the set op after the insert, and remove from the original list
+      sortedOps.push(linkOp)
+      originalOps.splice(originalOps.indexOf(linkOp), 1)
     }
   }
 
@@ -296,12 +311,24 @@ function convertChange(
 
   const sortedChange = sortOps(block.change)
 
+  console.log('sorted ops', sortedChange.ops)
+
   sortedChange.ops.forEach((op, i) => {
     if (op.action === 'ins') {
       // add the elem to cache
       elemCache[`${block.change.actor}:${op.elem}`] = op
 
-      // apply the discarded insert to the from instance before we skip conversion
+      // apply the discarded op to the from instance before we skip conversion
+      fromInstance = applyOps(fromInstance, [op], block.change.actor)
+      return
+    }
+    if (op.action === 'makeMap') {
+      // apply the discarded op to the from instance before we skip conversion
+      fromInstance = applyOps(fromInstance, [op], block.change.actor)
+      return
+    }
+    if (op.action === 'link') {
+      // apply the discarded op to the from instance before we skip conversion
       fromInstance = applyOps(fromInstance, [op], block.change.actor)
       return
     }

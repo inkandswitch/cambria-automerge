@@ -194,7 +194,7 @@ describe('Has basic schema tools', () => {
     })
   })
 
-  it.skip('can handle writes from v1 and v2', () => {
+  it.only('can handle writes from v1 and v2', () => {
     const state1 = Cambria.init({
       schema: 'project-v1',
       lenses: [InitialLensChange, FillOutProjectLensChange],
