@@ -318,18 +318,19 @@ function convertChange(
       elemCache[`${block.change.actor}:${op.elem}`] = op
 
       // apply the discarded op to the from instance
-      fromInstanceClone = applyOps(fromInstance, [op], block.change.actor)
+      // (todo: remove this but leave it for makemap and link?)
+      fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
       return
     }
     if (op.action === 'makeMap') {
-      // apply the discarded op to the from instance before we skip conversion
-      fromInstanceClone = applyOps(fromInstance, [op], block.change.actor)
+      // apply the discarded op to the from instance
+      fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
 
       return
     }
     if (op.action === 'link') {
-      // apply the discarded op to the from instance before we skip conversion
-      fromInstanceClone = applyOps(fromInstance, [op], block.change.actor)
+      // apply the discarded op to the from instance
+      fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
       return
     }
     const convertedOps = convertOp(
@@ -651,7 +652,7 @@ export function opToPatch(op: Op, instance: Instance, elemCache: ElemCache): Clo
 }
 
 function applyChangesToInstance(instance: Instance, changes: Change[]): [Instance, AutomergePatch] {
-  // console.log(`applying changes to ${instance.schema}`, deepInspect(changes));
+  console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
   const [backendState, patch] = Backend.applyChanges(instance.state, changes)
 
   return [
