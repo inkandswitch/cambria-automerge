@@ -903,11 +903,9 @@ describe('Has basic schema tools', () => {
         other: '',
         assignees: [
           { id: '1', name: 'Alice' },
-          { id: '', name: 'Bobby' },
+          { id: '', name: 'Bobby' }, // id: '' got filled in as default
         ],
       })
     })
-
-    it.skip('can inject default values for new objects in an array', () => {})
   })
 })
