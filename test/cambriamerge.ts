@@ -827,47 +827,10 @@ describe('Has basic schema tools', () => {
       })
     })
 
-    // it('reads a renamed property containing an array', () => {
-    //   // this lens has nothing to do with arrays but still pushes the patch thru cloudina
-    //   const doc1 = Cambria.init({
-    //     schema: 'array-v3',
-    //     lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE, ARRAY_V3_LENS_CHANGE],
-    //   })
-
-    //   // fill in default values by applying an empty change
-    //   const [, initialPatch] = Cambria.applyChanges(doc1, [])
-
-    //   // fill in default values by applying a patch full of defaults
-    //   const changeMaker = Frontend.applyPatch(Frontend.init(), initialPatch)
-    //   const [, change] = Frontend.change<unknown, ArrayTestDoc>(changeMaker, (doc) => {
-    //     doc.tags = ['maddening', 'infuriating', 'adorable']
-    //   })
-
-    //   const [, arrayPatch] = Cambria.applyChanges(doc1, [
-    //     { kind: 'change' as const, schema: 'array-v1', change },
-    //   ])
-
-    //   let doc = Frontend.applyPatch(Frontend.init(), initialPatch)
-    //   doc = Frontend.applyPatch(doc, arrayPatch)
-
-    //   assert.deepEqual(doc, {
-    //     newtags: ['maddening', 'adorable'],
-    //   })
-    // })
-
     // todo: insert an object into an array (not implemented yet)
     // (we have unimplemented paths on sending in make ops)
 
     // notes from orion:
     // -getPath needs to do this too
   })
-
-  // lists
-  // - default values
-  // - no lens
-  // - simple lens
-  // - obj in array: default values, renaming, etc
-  // - head/wrap
-
-  // - obj in array in obj...
 })
