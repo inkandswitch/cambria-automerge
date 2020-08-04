@@ -264,7 +264,7 @@ function convertOp(
   lensState: LensState,
   elemCache: ElemCache
 ): Op[] {
-  // toggle this definition to toggle debug logging inside this function
+  // toggle this comment block to toggle on/off debug logging inside this function
   // const debug = console.log
   const debug = (str) => {}
 
@@ -333,7 +333,7 @@ function sortOps(change: Change): Change {
       originalOps.splice(originalOps.indexOf(setOp), 1)
     }
 
-    if (op.action === 'makeMap') {
+    if (['makeList', 'makeMap'].includes(op.action)) {
       const linkOp = originalOps.find((o) => o.action === 'link' && o.value === op.obj)
       if (!linkOp) throw new Error(`expected to find link op corresponding to makeMap: ${op}`)
 
@@ -378,15 +378,10 @@ function convertChange(
       fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
       return
     }
-    if (op.action === 'makeMap') {
+    if (['makeMap', 'makeList', 'link'].includes(op.action)) {
       // apply the discarded op to the from instance
       fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
 
-      return
-    }
-    if (op.action === 'link') {
-      // apply the discarded op to the from instance
-      fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
       return
     }
     const convertedOps = convertOp(

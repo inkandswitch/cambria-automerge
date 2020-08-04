@@ -774,8 +774,7 @@ describe('Has basic schema tools', () => {
       })
     })
 
-    // this test is failing because we don't support makeList automerge ops yet
-    it.skip('can write to an array via assignment with an unrelated lens conversion', () => {
+    it('can write to an array via assignment with an unrelated lens conversion', () => {
       const doc1 = Cambria.init({
         schema: 'array-v2',
         lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
@@ -796,6 +795,7 @@ describe('Has basic schema tools', () => {
       doc = Frontend.applyPatch(doc, arrayPatch)
 
       assert.deepEqual(doc, {
+        other: '',
         tags: ['maddening', 'infuriating', 'adorable'],
       })
     })
