@@ -196,14 +196,14 @@ describe('Has basic schema tools', () => {
 
   it.only('can handle writes from v1 and v2', () => {
     const state1 = Cambria.init({
-      schema: 'project-v1',
+      schema: 'project-filled-out',
       lenses: [InitialLensChange, FillOutProjectLensChange],
     })
 
-    const [, nameChange] = Frontend.change(v1Frontend, (doc: any) => {
+    const [afterNameSet, nameChange] = Frontend.change(v1Frontend, (doc: any) => {
       doc.name = 'hello'
     })
-    const [, filloutChange] = Frontend.change(v1Frontend, (doc: any) => {
+    const [, filloutChange] = Frontend.change(afterNameSet, (doc: any) => {
       doc.details = { author: 'Peter' }
     })
 
@@ -220,9 +220,8 @@ describe('Has basic schema tools', () => {
 
     const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalDoc))
     assert.deepEqual(frontend, {
-      name: 'actor 2 says hi',
-      summary: '',
-    })
+      name: 'hello',
+      summary: ''
   })
 
   it('can handle writes from v1 and v2 when lenses are in memory, not in doc', () => {

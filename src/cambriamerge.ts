@@ -301,6 +301,8 @@ function convertChange(
   // we're going to play these instances forward locally here as we apply the ops,
   // but then we'll throw that out and just return a change which will be
   // applied by the caller of this function to the toInstance.
+  // TODO: determine whether this is actually necessary -- might not be since
+  // we do some copying at the layer above this
   let fromInstanceClone = { ...fromInstance }
   let toInstanceClone = { ...toInstance }
 
