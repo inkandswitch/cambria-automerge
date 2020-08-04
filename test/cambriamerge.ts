@@ -2,7 +2,7 @@ import assert from 'assert'
 import { inspect } from 'util'
 import { addProperty, renameProperty, LensSource } from 'cloudina'
 import { Frontend } from 'automerge'
-import { inside, plungeProperty, removeProperty, hoistProperty } from 'cloudina/dist/helpers'
+import { inside, plungeProperty, removeProperty, hoistProperty, map } from 'cloudina/dist/helpers'
 import * as Cambria from '../src/index'
 import { mkBlock } from '../src/cambriamerge'
 
@@ -729,7 +729,6 @@ describe('Has basic schema tools', () => {
         lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
       })
 
-      // this fails becuase we don't carry our incremental op instances across blocks
       const [v2state2] = Cambria.applyChanges(v2state1, [block2, block3])
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(v2state2))
@@ -820,11 +819,93 @@ describe('Has basic schema tools', () => {
         tags: ['maddening', 'adorable'],
       })
     })
+  })
 
-    // todo: insert an object into an array (not implemented yet)
-    // (we have unimplemented paths on sending in make ops)
+  describe.only('arrays of objects', () => {
+    // add an array of assignee objects with ID and name
+    const ARRAY_OBJECT_LENS_1 = {
+      from: 'mu',
+      to: 'array-object-v1',
+      lens: [
+        addProperty({ name: 'assignees', type: 'array', arrayItemType: 'object' }),
+        inside('assignees', [
+          map([
+            addProperty({ name: 'id', type: 'string' }),
+            addProperty({ name: 'name', type: 'string' }),
+          ]),
+        ]),
+      ],
+    }
 
-    // notes from orion:
-    // -getPath needs to do this too
+    // an unrelated lens, just to minimally trigger lens conversion
+    const ARRAY_OBJECT_LENS_2 = {
+      from: 'array-object-v1',
+      to: 'array-object-v2',
+      lens: [addProperty({ name: 'other', type: 'string' })],
+    }
+
+    interface ArrayObjectTestDoc {
+      assignees: Array<{ id: string; name: string }>
+    }
+
+    it('can accept a single schema and fill out empty array', () => {
+      const cambria = Cambria.init({
+        schema: 'array-object-v1',
+        lenses: [ARRAY_OBJECT_LENS_1],
+      })
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria))
+      assert.deepEqual(frontend, {
+        assignees: [],
+      })
+    })
+
+    it.only('can insert/overwrite objects in array', () => {
+      // In this test, we do a lens conversion from v1 to v2;
+      // the v1->v2 lens doesn't affect the actual data but it does force cambriamerge
+      // to push the change through cloudina.
+      // So far these changes have all fields filled in in the newly inserted objects;
+      // we don't test default value injection yet. (More on that below)
+
+      const cambria = Cambria.init({
+        schema: 'array-object-v1',
+        lenses: [ARRAY_OBJECT_LENS_1, ARRAY_OBJECT_LENS_2],
+      })
+      const changeMaker = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(cambria))
+
+      const [initialDoc, change] = Frontend.change<unknown, ArrayObjectTestDoc>(
+        changeMaker,
+        (doc) => {
+          doc.assignees.push({ id: '1', name: 'Alice' })
+          doc.assignees.push({ id: '2', name: 'Bob' })
+        }
+      )
+      const [, overwriteChange] = Frontend.change<unknown, ArrayObjectTestDoc>(
+        initialDoc,
+        (doc) => {
+          doc.assignees[1] = { id: '2', name: 'Bobby' }
+        }
+      )
+
+      const [cambria2, , block2] = Cambria.applyLocalChange(cambria, change)
+      const [cambria3, , block3] = Cambria.applyLocalChange(cambria2, overwriteChange)
+
+      const v2state1 = Cambria.init({
+        schema: 'array-object-v2',
+        lenses: [ARRAY_OBJECT_LENS_1, ARRAY_OBJECT_LENS_2],
+      })
+
+      const [v2state2] = Cambria.applyChanges(v2state1, [block2, block3])
+
+      const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(v2state2))
+      assert.deepEqual(frontend, {
+        other: '',
+        assignees: [
+          { id: '1', name: 'Alice' },
+          { id: '2', name: 'Bobby' },
+        ],
+      })
+    })
+
+    it.skip('can inject default values for new objects in an array', () => {})
   })
 })
