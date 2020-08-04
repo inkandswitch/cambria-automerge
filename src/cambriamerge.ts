@@ -357,7 +357,7 @@ function sortOps(change: Change): Change {
       }
     }
 
-    if (['makeList', 'makeMap'].includes(op.action)) {
+    if (['makeList', 'makeMap', 'makeTable', 'makeText'].includes(op.action)) {
       const linkOp = originalOps.find((o) => o.action === 'link' && o.value === op.obj)
       if (!linkOp) throw new Error(`expected to find link op corresponding to makeMap: ${op}`)
 
@@ -405,7 +405,7 @@ function convertChange(
       fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
       return
     }
-    if (['makeMap', 'makeList', 'link'].includes(op.action)) {
+    if (['makeMap', 'makeList', 'makeText', 'makeTable'].includes(op.action)) {
       // apply the discarded op to the from instance
       fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
 
@@ -570,6 +570,7 @@ function patchToOps(
       let key = pathParts.pop()
       const objPath = pathParts.join('/')
 
+      // console.log({ pathCache })
       const objId = getObjId(instance.state, objPath) || pathCache[objPath]
 
       if (getObjType(instance.state, objId) === 'list') {
@@ -580,7 +581,10 @@ function patchToOps(
         const opKey = originalOp.key
 
         if (patchop.op === 'add') {
-          const insertAfter = findElemOfIndex(instance.state, objId, parseInt(key, 10) - 1)
+          const arrayIndex = parseInt(key, 10) - 1
+          const insertAfter = findElemOfIndex(instance.state, objId, arrayIndex)
+          if (insertAfter === null)
+            throw new Error(`expected to find array element at ${arrayIndex} in ${patchop.path}`)
           if (opKey === undefined) throw new Error(`expected key on op: ${originalOp}`)
           const insertElemId = parseInt(opKey.split(':')[1], 10)
           acc.push({
@@ -610,6 +614,9 @@ function patchToOps(
         const op = { action, obj: objId, key }
         acc.push(op)
       }
+
+      // console.log('converted one patchop', { patchop, acc })
+
       return acc
     })
     .flat()
@@ -651,12 +658,13 @@ function findIndexOfElem(state: any, objId: ObjectId, insertKey: string): number
 }
 
 // given an automerge instance, an array obj id, and an index, return the elem ID
-function findElemOfIndex(state: any, objId: ObjectId, index: number): string {
+function findElemOfIndex(state: any, objId: ObjectId, index: number): string | null {
   if (index === -1) return '_head'
 
   const elemId = state.getIn(['opSet', 'byObject', objId, '_elemIds']).keyOf(index) // todo: is this the right way to look for an index in SkipList?
   if (elemId === undefined || elemId === null) {
-    throw new Error(`Couldn't find array index ${index} in object ${objId}`)
+    // if we can't find an elemId at that index, just return null
+    return null
   }
   return elemId
 }
@@ -688,12 +696,25 @@ function getObjId(state: any, path: string): ObjectId | null {
       objectId = newObjectId
     } else {
       // getting object ID for list
-      console.log('list state', opSet.getIn(['byObject', objectId]).toJS())
+      // console.log('list state', opSet.getIn(['byObject', objectId]).toJS())
 
+      // todo: implement this.
+      // (but there's a problem: the list doesn't have anything in it yet)
       // It makes sense that the first element isn't present here.
       // We've never applied any of the relevant insert/makemap/link changes
       // to the _to_ instance, so when we go looking here there's nothing.
-      throw new Error('get obj id not supported on lists')
+      // console.log('getting obj id', path)
+      // console.log('obj metadata', deepInspect(opSet.getIn(['byObject', objectId]).toJS()))
+
+      const arrayIndex = parseInt(pathSegment, 10)
+      // if (isNaN(arrayIndex)) throw new Error(`expected ${pathSegment} to be a number`)
+      const elemId = findElemOfIndex(state, objectId, arrayIndex)
+      if (elemId === null) return null
+      const objId = opSet.getIn(['byObject', objectId, '_elemIds']).getValue(elemId).obj
+      // console.log('got an obj id!', objId)
+      return objId
+
+      // throw new Error('get obj id not supported on lists')
     }
   }
 
@@ -738,6 +759,16 @@ export function opToPatch(op: Op, instance: Instance, elemCache: ElemCache): Clo
     case 'del': {
       const path = buildPath(op, instance, elemCache)
       return [{ op: 'remove', path }]
+    }
+    case 'link': {
+      // We need to play an empty object/list creation into the to instance
+      const action = op.key && elemCache[op.key] ? 'add' : 'replace'
+      const path = buildPath(op, instance, elemCache)
+
+      // figure out what type of empty container to create, based on whether
+      // makeMap or makeList was used to create the object being linked
+      const objType = getObjType(instance.state, op.value)
+      return [{ op: action, path, value: objType === 'list' ? [] : {} }]
     }
     default:
       // note: inserts in Automerge 0 don't produce a patch, so we don't have a case for them here.

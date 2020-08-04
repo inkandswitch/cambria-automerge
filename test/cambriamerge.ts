@@ -879,29 +879,29 @@ describe('Has basic schema tools', () => {
           doc.assignees.push({ id: '2', name: 'Bob' })
         }
       )
-      const [, overwriteChange] = Frontend.change<unknown, ArrayObjectTestDoc>(
-        initialDoc,
-        (doc) => {
-          doc.assignees[1] = { id: '2', name: 'Bobby' }
-        }
-      )
+      // const [, overwriteChange] = Frontend.change<unknown, ArrayObjectTestDoc>(
+      //   initialDoc,
+      //   (doc) => {
+      //     doc.assignees[1] = { id: '2', name: 'Bobby' }
+      //   }
+      // )
 
       const [cambria2, , block2] = Cambria.applyLocalChange(cambria, change)
-      const [cambria3, , block3] = Cambria.applyLocalChange(cambria2, overwriteChange)
+      // const [cambria3, , block3] = Cambria.applyLocalChange(cambria2, overwriteChange)
 
       const v2state1 = Cambria.init({
         schema: 'array-object-v2',
         lenses: [ARRAY_OBJECT_LENS_1, ARRAY_OBJECT_LENS_2],
       })
 
-      const [v2state2] = Cambria.applyChanges(v2state1, [block2, block3])
+      const [v2state2] = Cambria.applyChanges(v2state1, [block2])
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(v2state2))
       assert.deepEqual(frontend, {
         other: '',
         assignees: [
           { id: '1', name: 'Alice' },
-          { id: '2', name: 'Bobby' },
+          { id: '2', name: 'Bob' },
         ],
       })
     })
