@@ -689,24 +689,11 @@ function getObjId(state: any, path: string): ObjectId | null {
       objectId = newObjectId
     } else {
       // getting object ID for list
-      // console.log('list state', opSet.getIn(['byObject', objectId]).toJS())
-
-      // todo: implement this.
-      // (but there's a problem: the list doesn't have anything in it yet)
-      // It makes sense that the first element isn't present here.
-      // We've never applied any of the relevant insert/makemap/link changes
-      // to the _to_ instance, so when we go looking here there's nothing.
-      // console.log('getting obj id', path)
-      // console.log('obj metadata', deepInspect(opSet.getIn(['byObject', objectId]).toJS()))
 
       const arrayIndex = parseInt(pathSegment, 10)
-      // if (isNaN(arrayIndex)) throw new Error(`expected ${pathSegment} to be a number`)
       const elemId = findElemOfIndex(state, objectId, arrayIndex)
       const objId = opSet.getIn(['byObject', objectId, '_elemIds']).getValue(elemId).obj
-      // console.log('got an obj id!', objId)
       return objId
-
-      // throw new Error('get obj id not supported on lists')
     }
   }
 
@@ -786,7 +773,6 @@ function applyChangesToInstance(instance: Instance, changes: Change[]): [Instanc
 }
 
 function applyOps(instance: Instance, ops: Op[], actor: string = CAMBRIA_MAGIC_ACTOR): Instance {
-  // console.log('applyOps', instance.schema, actor, instance.clock[actor])
   // construct a change out of the ops
   const change = {
     ops,
@@ -799,10 +785,3 @@ function applyOps(instance: Instance, ops: Op[], actor: string = CAMBRIA_MAGIC_A
   const [newInstance] = applyChangesToInstance(instance, [change])
   return newInstance
 }
-
-/*
-function lessOrEqual(clock1 : Clock, clock2 : Clock) : boolean {
-  const keys : string[] = Object.keys(clock1).concat(Object.keys(clock2))
-  return keys.reduce((result, key) => (result && (clock1[key] || 0) <= (clock2[key] || 0)), true as boolean)
-}
-*/
