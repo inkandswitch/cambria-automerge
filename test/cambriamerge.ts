@@ -207,10 +207,7 @@ describe('Has basic schema tools', () => {
 
     const [, filloutChange] = Frontend.change(v2Frontend, (doc: any) => {
       // set a map directly, creating a new object and a makeMap op
-      // doc.details = { author: 'Peter' }
-
-      // directly set a child property on the nested object
-      doc.details.author = 'Peter'
+      doc.details = { author: 'Peter' }
     })
 
     const changeBlocks = [
@@ -236,9 +233,6 @@ describe('Has basic schema tools', () => {
       created_at: '',
       details: {
         author: 'Peter',
-
-        // Do we expect this default value here after setting the entire object?
-        // probably should?
         date: '',
       },
     })
