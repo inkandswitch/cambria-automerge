@@ -388,12 +388,7 @@ function convertChange(
   // cache array insert ops by the elem that they created
   // (cache is change-scoped because we assume insert+set combinations are within same change)
   const elemCache: ElemCache = {}
-
-  // console.log('raw ops', deepInspect(block.change.ops))
-
   const sortedChange = sortOps(block.change)
-
-  // console.log('sorted ops', deepInspect(sortedChange.ops))
 
   sortedChange.ops.forEach((op, i) => {
     if (op.action === 'ins') {
@@ -401,7 +396,6 @@ function convertChange(
       elemCache[`${block.change.actor}:${op.elem}`] = op
 
       // apply the discarded op to the from instance
-      // (todo: remove this but leave it for makemap and link?)
       fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor)
       return
     }
