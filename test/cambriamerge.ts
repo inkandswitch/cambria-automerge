@@ -891,8 +891,6 @@ describe('Has basic schema tools', () => {
       const [cambria2, , block2] = Cambria.applyLocalChange(cambria, change)
       const [cambria3, , block3] = Cambria.applyLocalChange(cambria2, overwriteChange)
 
-      console.log(deepInspect(block3))
-
       const v2state1 = Cambria.init({
         schema: 'array-object-v2',
         lenses: [ARRAY_OBJECT_LENS_1, ARRAY_OBJECT_LENS_2],

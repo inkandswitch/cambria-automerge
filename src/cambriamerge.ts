@@ -265,8 +265,8 @@ function convertOp(
   elemCache: ElemCache
 ): Op[] {
   // toggle this comment block to toggle on/off debug logging inside this function
-  const debug = console.log
-  // const debug = (str) => {}
+  // const debug = console.log
+  const debug = (str) => {}
 
   const op = change.ops[index]
   debug('\n convertOp pipeline:')
