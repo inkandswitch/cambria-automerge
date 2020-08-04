@@ -821,7 +821,7 @@ describe('Has basic schema tools', () => {
     })
   })
 
-  describe.only('arrays of objects', () => {
+  describe('arrays of objects', () => {
     // add an array of assignee objects with ID and name
     const ARRAY_OBJECT_LENS_1 = {
       from: 'mu',
@@ -845,7 +845,7 @@ describe('Has basic schema tools', () => {
     }
 
     interface ArrayObjectTestDoc {
-      assignees: Array<{ id: string; name: string }>
+      assignees: Array<{ id?: string; name: string }>
     }
 
     it('can accept a single schema and fill out empty array', () => {
@@ -859,7 +859,7 @@ describe('Has basic schema tools', () => {
       })
     })
 
-    it.only('can insert/overwrite objects in array', () => {
+    it('can insert/overwrite objects in array', () => {
       // In this test, we do a lens conversion from v1 to v2;
       // the v1->v2 lens doesn't affect the actual data but it does force cambriamerge
       // to push the change through cloudina.
@@ -879,29 +879,31 @@ describe('Has basic schema tools', () => {
           doc.assignees.push({ id: '2', name: 'Bob' })
         }
       )
-      // const [, overwriteChange] = Frontend.change<unknown, ArrayObjectTestDoc>(
-      //   initialDoc,
-      //   (doc) => {
-      //     doc.assignees[1] = { id: '2', name: 'Bobby' }
-      //   }
-      // )
+      const [, overwriteChange] = Frontend.change<unknown, ArrayObjectTestDoc>(
+        initialDoc,
+        (doc) => {
+          doc.assignees[1] = { name: 'Bobby' }
+        }
+      )
 
       const [cambria2, , block2] = Cambria.applyLocalChange(cambria, change)
-      // const [cambria3, , block3] = Cambria.applyLocalChange(cambria2, overwriteChange)
+      const [cambria3, , block3] = Cambria.applyLocalChange(cambria2, overwriteChange)
+
+      console.log(deepInspect(block3))
 
       const v2state1 = Cambria.init({
         schema: 'array-object-v2',
         lenses: [ARRAY_OBJECT_LENS_1, ARRAY_OBJECT_LENS_2],
       })
 
-      const [v2state2] = Cambria.applyChanges(v2state1, [block2])
+      const [v2state2] = Cambria.applyChanges(v2state1, [block2, block3])
 
       const frontend = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(v2state2))
       assert.deepEqual(frontend, {
         other: '',
         assignees: [
           { id: '1', name: 'Alice' },
-          { id: '2', name: 'Bob' },
+          { id: '', name: 'Bobby' },
         ],
       })
     })

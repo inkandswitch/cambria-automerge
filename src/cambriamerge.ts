@@ -571,7 +571,7 @@ function patchToOps(
       const objPath = pathParts.join('/')
 
       // console.log({ pathCache })
-      const objId = getObjId(instance.state, objPath) || pathCache[objPath]
+      const objId = pathCache[objPath] || getObjId(instance.state, objPath)
 
       if (getObjType(instance.state, objId) === 'list') {
         if (key === undefined || Number.isNaN(parseInt(key, 10))) {
@@ -658,13 +658,12 @@ function findIndexOfElem(state: any, objId: ObjectId, insertKey: string): number
 }
 
 // given an automerge instance, an array obj id, and an index, return the elem ID
-function findElemOfIndex(state: any, objId: ObjectId, index: number): string | null {
+function findElemOfIndex(state: any, objId: ObjectId, index: number): string {
   if (index === -1) return '_head'
 
   const elemId = state.getIn(['opSet', 'byObject', objId, '_elemIds']).keyOf(index) // todo: is this the right way to look for an index in SkipList?
   if (elemId === undefined || elemId === null) {
-    // if we can't find an elemId at that index, just return null
-    return null
+    throw new Error(`expected to find elem ID at index ${index} in obj ${objId}`)
   }
   return elemId
 }
@@ -709,7 +708,6 @@ function getObjId(state: any, path: string): ObjectId | null {
       const arrayIndex = parseInt(pathSegment, 10)
       // if (isNaN(arrayIndex)) throw new Error(`expected ${pathSegment} to be a number`)
       const elemId = findElemOfIndex(state, objectId, arrayIndex)
-      if (elemId === null) return null
       const objId = opSet.getIn(['byObject', objectId, '_elemIds']).getValue(elemId).obj
       // console.log('got an obj id!', objId)
       return objId
@@ -778,7 +776,7 @@ export function opToPatch(op: Op, instance: Instance, elemCache: ElemCache): Clo
 }
 
 function applyChangesToInstance(instance: Instance, changes: Change[]): [Instance, AutomergePatch] {
-  console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
+  // console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
   const [backendState, patch] = Backend.applyChanges(instance.state, changes)
 
   return [
