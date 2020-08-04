@@ -207,6 +207,7 @@ describe('Has basic schema tools', () => {
 
     const [, filloutChange] = Frontend.change(v2Frontend, (doc: any) => {
       // set a map directly, creating a new object and a makeMap op
+      // (this is missing a field that v2 actually requires)
       doc.details = { author: 'Peter' }
     })
 
@@ -220,15 +221,16 @@ describe('Has basic schema tools', () => {
     const finalV1Doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalV1State))
     assert.deepEqual(finalV1Doc, { name: 'hello', summary: '' })
 
-    // Play the changes into a V2 frontend
-    const state2 = Cambria.init({
-      schema: 'project-v2',
+    // Play the changes into a V3 frontend.
+    // This forces the v2 change to get lensed, filling in default values
+    const state3 = Cambria.init({
+      schema: 'project-v3',
       lenses: AllLensChanges,
     })
-    const [finalV2State] = Cambria.applyChanges(state2, changeBlocks)
-    const finalV2Doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalV2State))
-    assert.deepEqual(finalV2Doc, {
-      name: 'hello',
+    const [finalV3State] = Cambria.applyChanges(state3, changeBlocks)
+    const finalV3Doc = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(finalV3State))
+    assert.deepEqual(finalV3Doc, {
+      title: 'hello',
       summary: '',
       created_at: '',
       details: {

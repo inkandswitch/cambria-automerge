@@ -338,7 +338,9 @@ function sortOps(change: Change): Change {
     // operations later on because the insert has been fully processed.
     if (op.action === 'ins') {
       // todo: can there be more than one of these in a change? if so what happens?
-      const reifyingOp = originalOps.find((o) => o.key === `${change.actor}:${op.elem}`)
+      const reifyingOp = originalOps.find(
+        (o) => ['set', 'link'].includes(o.action) && o.key === `${change.actor}:${op.elem}`
+      )
       if (!reifyingOp)
         throw new Error(`expected to find a reifying op corresponding to ins op: ${op}`)
 
@@ -352,8 +354,6 @@ function sortOps(change: Change): Change {
         if (!makeOp) throw new Error(`expected make op corresponding to link ${reifyingOp}`)
         appendOp(makeOp)
         appendOp(reifyingOp)
-      } else {
-        throw new Error(`expected reifying op to have action 'set' or 'link'`)
       }
     }
 
@@ -389,11 +389,11 @@ function convertChange(
   // (cache is change-scoped because we assume insert+set combinations are within same change)
   const elemCache: ElemCache = {}
 
-  console.log('raw ops', deepInspect(block.change.ops))
+  // console.log('raw ops', deepInspect(block.change.ops))
 
   const sortedChange = sortOps(block.change)
 
-  console.log('sorted ops', deepInspect(sortedChange.ops))
+  // console.log('sorted ops', deepInspect(sortedChange.ops))
 
   sortedChange.ops.forEach((op, i) => {
     if (op.action === 'ins') {
