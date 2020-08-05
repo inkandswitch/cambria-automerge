@@ -152,7 +152,7 @@ function initInstance(schema) {
     };
 }
 function convertOp(change, index, from, to, lensState, elemCache) {
-    // toggle this definition to toggle debug logging inside this function
+    // toggle this comment block to toggle on/off debug logging inside this function
     // const debug = console.log
     const debug = (str) => { };
     const op = change.ops[index];
@@ -189,24 +189,47 @@ function getInstanceAt(schema, actorId, seq, lensState, history) {
 function sortOps(change) {
     const originalOps = [...change.ops];
     const sortedOps = [];
+    // add an op to the sortedOps array; delete from originalOps
+    const appendOp = (op) => {
+        sortedOps.push(op);
+        originalOps.splice(originalOps.indexOf(op), 1);
+    };
     for (const op of originalOps) {
         sortedOps.push(op);
-        // for an insert, we add the op, followed by its corresponding set op
+        // An 'ins' op just creates a placeholder. Later on, that gets filled in by
+        // what we'll call here reifying ops, which can be:
+        // 1) 'set' (for a list of scalars)
+        // 2) 'makeMap' + 'link' (for a list of objects)
+        // 3) 'makeList' + 'link' (for a list of lists)
+        // In all 3 of these cases, we need to ensure that those subsequent ops
+        // come immediately after the 'ins'. This turns the insertion from a placeholder
+        // into an actual reified operation, and simplifies the processing of future
+        // operations later on because the insert has been fully processed.
         if (op.action === 'ins') {
-            const setOp = originalOps.find((o) => o.action === 'set' && o.key === `${change.actor}:${op.elem}`);
-            if (!setOp)
-                throw new Error(`expected to find set op corresponding to ins op: ${op}`);
-            // add the set op after the insert, and remove from the original list
-            sortedOps.push(setOp);
-            originalOps.splice(originalOps.indexOf(setOp), 1);
+            // todo: can there be more than one of these in a change? if so what happens?
+            const reifyingOp = originalOps.find((o) => ['set', 'link'].includes(o.action) && o.key === `${change.actor}:${op.elem}`);
+            if (!reifyingOp)
+                throw new Error(`expected to find a reifying op corresponding to ins op: ${op}`);
+            if (reifyingOp.action === 'set') {
+                appendOp(reifyingOp);
+            }
+            else if (reifyingOp.action === 'link') {
+                // Here we can't just pull up the link op;
+                // we need to find the new map or list it's referring to,
+                // and make the order [ins, make*, link, ...]
+                const makeOp = originalOps.find((o) => o.obj === reifyingOp.value);
+                if (!makeOp)
+                    throw new Error(`expected make op corresponding to link ${reifyingOp}`);
+                appendOp(makeOp);
+                appendOp(reifyingOp);
+            }
         }
-        if (op.action === 'makeMap') {
+        if (['makeList', 'makeMap', 'makeTable', 'makeText'].includes(op.action)) {
             const linkOp = originalOps.find((o) => o.action === 'link' && o.value === op.obj);
             if (!linkOp)
                 throw new Error(`expected to find link op corresponding to makeMap: ${op}`);
             // add the set op after the insert, and remove from the original list
-            sortedOps.push(linkOp);
-            originalOps.splice(originalOps.indexOf(linkOp), 1);
+            appendOp(linkOp);
         }
     }
     return Object.assign(Object.assign({}, change), { ops: sortedOps });
@@ -230,16 +253,10 @@ function convertChange(block, fromInstance, toInstance, lensState) {
             // add the elem to cache
             elemCache[`${block.change.actor}:${op.elem}`] = op;
             // apply the discarded op to the from instance
-            // (todo: remove this but leave it for makemap and link?)
             fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor);
             return;
         }
-        if (op.action === 'makeMap') {
-            // apply the discarded op to the from instance
-            fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor);
-            return;
-        }
-        if (op.action === 'link') {
+        if (['makeMap', 'makeList', 'makeText', 'makeTable'].includes(op.action)) {
             // apply the discarded op to the from instance
             fromInstanceClone = applyOps(fromInstanceClone, [op], block.change.actor);
             return;
@@ -324,7 +341,9 @@ function bootstrap(instance, lensState) {
     bootstrapChange.ops = patchToOps(defaultsPatch, bootstrapChange, 1, instance);
     return bootstrapChange;
 }
+// convert a patch back into automerge ops
 function patchToOps(patch, origin, opIndex, instance) {
+    // as we create objects in our conversion process, remember object IDs by path
     const pathCache = { '': ROOT_ID };
     // todo: see if we can refactor to have TS tell us what's missing here
     const ops = patch
@@ -363,7 +382,8 @@ function patchToOps(patch, origin, opIndex, instance) {
         const pathParts = patchop.path.split('/');
         let key = pathParts.pop();
         const objPath = pathParts.join('/');
-        const objId = getObjId(instance.state, objPath) || pathCache[objPath];
+        // console.log({ pathCache })
+        const objId = pathCache[objPath] || getObjId(instance.state, objPath);
         if (getObjType(instance.state, objId) === 'list') {
             if (key === undefined || Number.isNaN(parseInt(key, 10))) {
                 throw new Error(`Expected array index on path ${patchop.path}`);
@@ -371,7 +391,10 @@ function patchToOps(patch, origin, opIndex, instance) {
             const originalOp = origin.ops[opIndex];
             const opKey = originalOp.key;
             if (patchop.op === 'add') {
-                const insertAfter = findElemOfIndex(instance.state, objId, parseInt(key, 10) - 1);
+                const arrayIndex = parseInt(key, 10) - 1;
+                const insertAfter = findElemOfIndex(instance.state, objId, arrayIndex);
+                if (insertAfter === null)
+                    throw new Error(`expected to find array element at ${arrayIndex} in ${patchop.path}`);
                 if (opKey === undefined)
                     throw new Error(`expected key on op: ${originalOp}`);
                 const insertElemId = parseInt(opKey.split(':')[1], 10);
@@ -383,6 +406,10 @@ function patchToOps(patch, origin, opIndex, instance) {
                 });
             }
             key = opKey;
+        }
+        if (getObjType(instance.state, objId) === 'list') {
+            // todo: maybe need to do some stuff here for object-in-array?
+            // look up the obj, generate the makeMap/link ops?
         }
         if (objId === undefined)
             throw new Error(`Could not find object with path ${objPath}`);
@@ -398,6 +425,7 @@ function patchToOps(patch, origin, opIndex, instance) {
             const op = { action, obj: objId, key };
             acc.push(op);
         }
+        // console.log('converted one patchop', { patchop, acc })
         return acc;
     })
         .flat();
@@ -444,13 +472,12 @@ function findElemOfIndex(state, objId, index) {
         return '_head';
     const elemId = state.getIn(['opSet', 'byObject', objId, '_elemIds']).keyOf(index); // todo: is this the right way to look for an index in SkipList?
     if (elemId === undefined || elemId === null) {
-        throw new Error(`Couldn't find array index ${index} in object ${objId}`);
+        throw new Error(`expected to find elem ID at index ${index} in obj ${objId}`);
     }
     return elemId;
 }
 // Given a json path in a json doc, return the object ID at that path.
 // If the path doesn't resolve to an existing object ID, returns null
-// Todo: support lists
 function getObjId(state, path) {
     if (path === '')
         return ROOT_ID;
@@ -458,15 +485,25 @@ function getObjId(state, path) {
     const opSet = state.get('opSet');
     let objectId = ROOT_ID;
     for (const pathSegment of pathSegments) {
-        const objectKeys = opSet.getIn(['byObject', objectId]);
-        // _keys contains an array for each key in case there are conflicts;
-        // it's sorted so we can just take the first element
-        const newObjectId = objectKeys.getIn(['_keys', pathSegment, 0, 'value']);
-        // Sometimes, the path we're looking for isn't in the instance, give up
-        if (newObjectId === undefined) {
-            return null;
+        const objType = getObjType(state, objectId);
+        if (objType === 'object') {
+            const objectKeys = opSet.getIn(['byObject', objectId]);
+            // _keys contains an array for each key in case there are conflicts;
+            // it's sorted so we can just take the first element
+            const newObjectId = objectKeys.getIn(['_keys', pathSegment, 0, 'value']);
+            // Sometimes, the path we're looking for isn't in the instance, give up
+            if (newObjectId === undefined) {
+                return null;
+            }
+            objectId = newObjectId;
         }
-        objectId = newObjectId;
+        else {
+            // getting object ID for list
+            const arrayIndex = parseInt(pathSegment, 10);
+            const elemId = findElemOfIndex(state, objectId, arrayIndex);
+            const objId = opSet.getIn(['byObject', objectId, '_elemIds']).getValue(elemId).obj;
+            return objId;
+        }
     }
     return objectId;
 }
@@ -508,6 +545,15 @@ function opToPatch(op, instance, elemCache) {
             const path = buildPath(op, instance, elemCache);
             return [{ op: 'remove', path }];
         }
+        case 'link': {
+            // We need to play an empty object/list creation into the to instance
+            const action = op.key && elemCache[op.key] ? 'add' : 'replace';
+            const path = buildPath(op, instance, elemCache);
+            // figure out what type of empty container to create, based on whether
+            // makeMap or makeList was used to create the object being linked
+            const objType = getObjType(instance.state, op.value);
+            return [{ op: action, path, value: objType === 'list' ? [] : {} }];
+        }
         default:
             // note: inserts in Automerge 0 don't produce a patch, so we don't have a case for them here.
             // (we swallow them earlier in the process)
@@ -530,7 +576,6 @@ function applyChangesToInstance(instance, changes) {
     ];
 }
 function applyOps(instance, ops, actor = exports.CAMBRIA_MAGIC_ACTOR) {
-    // console.log('applyOps', instance.schema, actor, instance.clock[actor])
     // construct a change out of the ops
     const change = {
         ops,
@@ -542,10 +587,4 @@ function applyOps(instance, ops, actor = exports.CAMBRIA_MAGIC_ACTOR) {
     const [newInstance] = applyChangesToInstance(instance, [change]);
     return newInstance;
 }
-/*
-function lessOrEqual(clock1 : Clock, clock2 : Clock) : boolean {
-  const keys : string[] = Object.keys(clock1).concat(Object.keys(clock2))
-  return keys.reduce((result, key) => (result && (clock1[key] || 0) <= (clock2[key] || 0)), true as boolean)
-}
-*/
 //# sourceMappingURL=cambriamerge.js.map
