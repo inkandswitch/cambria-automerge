@@ -79,6 +79,7 @@ class CambriaBackend {
             inDoc: immutable_1.Set(),
             graph: lenses.reduce((graph, lens) => cloudina_1.registerLens(graph, lens.from, lens.to, lens.lens), cloudina_1.initLensGraph()),
         };
+        cloudina_1.lensFromTo(this.lensState.graph, "mu", schema); // throws error if no valid path
     }
     applyLocalChange(request) {
         let lenses = [];
