@@ -95,6 +95,10 @@ describe('Has basic schema tools', () => {
     ])
   })
 
+  it('throws an error if invalid lens is given', () => {
+    assert.throws(() => Cambria.init({ schema: 'invalid', lenses: [] }))
+  })
+
   it('can accept a real change', () => {
     const [, change] = Frontend.change(v1Frontend, (doc: any) => {
       doc.title = 'hello'

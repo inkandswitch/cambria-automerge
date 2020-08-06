@@ -161,6 +161,7 @@ export class CambriaBackend {
         initLensGraph()
       ),
     }
+    lensFromTo(this.lensState.graph, "mu", schema) // throws error if no valid path
   }
 
   applyLocalChange(request: Change): [AutomergePatch, CambriaBlock] {
