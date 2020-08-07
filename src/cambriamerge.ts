@@ -32,7 +32,6 @@ type ObjectType = 'list' | 'object'
 
 const ROOT_ID = '00000000-0000-0000-0000-000000000000'
 export const CAMBRIA_MAGIC_ACTOR = '0000000000'
-let CAMBRIA_MAGIC_ELEM = 10000000000
 
 
 function deepInspect(object: any) {
