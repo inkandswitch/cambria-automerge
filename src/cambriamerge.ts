@@ -47,7 +47,7 @@ export interface Instance {
   clock: Clock
   schema: string
   deps: Clock
-  elem: number
+  elem: { [actor: string]: number }
   bootstrapped: boolean
   // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
   state: BackendState
@@ -252,7 +252,7 @@ function initInstance(schema): Instance {
   const state = Backend.init()
   return {
     state,
-    elem: 1,
+    elem: {},
     deps: {},
     schema,
     bootstrapped: false,
@@ -585,7 +585,7 @@ function patchToOps(
             throw new Error(`expected to find array element at ${arrayIndex} in ${patchop.path}`)
           //if (originalOp.key === undefined) throw new Error(`expected key on op: ${originalOp}`)
           const insertElemId = parseInt((originalOp.key ||"").split(':')[1], 10)
-          const elem = insertElemId || (instance.elem + 1)
+          const elem = insertElemId || (instance.elem[origin.actor] || 0) + 1
           key = `${origin.actor}:${elem}` 
           acc.push({
             action: 'ins',
@@ -778,7 +778,11 @@ export function opToPatch(op: Op, instance: Instance, elemCache: ElemCache): Clo
 
 function applyChangesToInstance(instance: Instance, changes: Change[]): [Instance, AutomergePatch] {
   //console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
-  const elem = Math.max( instance.elem, ... changes.map((change) => change.ops.map(op => op.elem || 0)).flat())
+  let elem = changes.reduce((acc, change) => {
+    const oldMax = acc[change.actor] || 0
+    const maxElem = Math.max(oldMax, ... change.ops.map(op => op.elem || 0))
+    return { ... acc, [change.actor]: maxElem }
+  }, instance.elem);
   const [backendState, patch] = Backend.applyChanges(instance.state, changes)
 
   return [
