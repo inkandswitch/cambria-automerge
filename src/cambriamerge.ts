@@ -34,6 +34,7 @@ const ROOT_ID = '00000000-0000-0000-0000-000000000000'
 export const CAMBRIA_MAGIC_ACTOR = '0000000000'
 let CAMBRIA_MAGIC_ELEM = 10000000000
 
+
 function deepInspect(object: any) {
   return inspect(object, false, null, true)
 }
@@ -47,6 +48,7 @@ export interface Instance {
   clock: Clock
   schema: string
   deps: Clock
+  elem: number
   bootstrapped: boolean
   // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
   state: BackendState
@@ -251,6 +253,7 @@ function initInstance(schema): Instance {
   const state = Backend.init()
   return {
     state,
+    elem: 1,
     deps: {},
     schema,
     bootstrapped: false,
@@ -494,7 +497,7 @@ function applySchemaChanges(
     instance.bootstrapped = true
   }
 
-  // console.log("about to apply the final constructed change");
+  //console.log(`applying final changes to ${instance.schema}`, deepInspect(changesToApply))
   const [newInstance, patch] = applyChangesToInstance(instance, changesToApply)
 
   return [newInstance, patch, lensState]
@@ -583,7 +586,7 @@ function patchToOps(
             throw new Error(`expected to find array element at ${arrayIndex} in ${patchop.path}`)
           //if (originalOp.key === undefined) throw new Error(`expected key on op: ${originalOp}`)
           const insertElemId = parseInt((originalOp.key ||"").split(':')[1], 10)
-          const elem = insertElemId || (CAMBRIA_MAGIC_ELEM++) // I'm sorry Martin and God
+          const elem = insertElemId || (instance.elem + 1)
           key = `${origin.actor}:${elem}` 
           acc.push({
             action: 'ins',
@@ -775,13 +778,15 @@ export function opToPatch(op: Op, instance: Instance, elemCache: ElemCache): Clo
 }
 
 function applyChangesToInstance(instance: Instance, changes: Change[]): [Instance, AutomergePatch] {
-  // console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
+  //console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
+  const elem = Math.max( instance.elem, ... changes.map((change) => change.ops.map(op => op.elem || 0)).flat())
   const [backendState, patch] = Backend.applyChanges(instance.state, changes)
 
   return [
     {
       clock: patch.clock || {},
       schema: instance.schema,
+      elem,
       bootstrapped: true,
       deps: patch.deps || {},
       state: backendState,
