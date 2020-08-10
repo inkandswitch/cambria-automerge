@@ -134,8 +134,30 @@ export function getPatch(doc: CambriaBackend): AutomergePatch {
   return patch
 }
 
-export function getChanges(doc: CambriaBackend, haveDeps: Clock): CambriaBlock[] {
-  return doc.getChanges(haveDeps)
+export function getChanges(oldState: CambriaBackend, newState: CambriaBackend): CambriaBlock[] {
+  const newClock = newState.primaryInstance().clock
+  const oldClock = oldState.primaryInstance().clock
+  if (!lessOrEqual(oldClock, newClock)) {
+    throw new RangeError('Cannot diff two states that have diverged')
+  }
+  return newState.getMissingChanges(oldClock)
+}
+
+export function getMissingChanges(doc: CambriaBackend, haveDeps: Clock) : CambriaBlock[] {
+  return doc.getMissingChanges(haveDeps)
+}
+
+export function getChangesForActor(doc: CambriaBackend, actor: string, after: number = 0) : CambriaBlock[] {
+  return doc.history.filter((c) => c.change.actor === actor && c.change.seq > after)
+}
+
+export function getMissignDeps(doc: CambriaBackend) : Clock {
+  return Backend.getMissingDeps(doc.primaryInstance().state)
+}
+
+export function merge(local: CambriaBackend, remote: CambriaBackend) : [ CambriaBackend, AutomergePatch ] {
+  const changes = getMissingChanges(remote, local.primaryInstance().clock)
+  return applyChanges(local, changes)
 }
 
 export class CambriaBackend {
@@ -162,6 +184,10 @@ export class CambriaBackend {
       ),
     }
     lensFromTo(this.lensState.graph, "mu", schema) // throws error if no valid path
+  }
+
+  primaryInstance() : Instance {
+    return this.getInstance(this.schema)
   }
 
   applyLocalChange(request: Change): [AutomergePatch, CambriaBlock] {
@@ -234,7 +260,7 @@ export class CambriaBackend {
     return patch
   }
 
-  getChanges(haveDeps: Clock): CambriaBlock[] {
+  getMissingChanges(haveDeps: Clock): CambriaBlock[] {
     return this.history.filter((block) => block.change.seq > (haveDeps[block.change.actor] || 0))
   }
 
@@ -785,4 +811,9 @@ function applyOps(instance: Instance, ops: Op[], actor: string = CAMBRIA_MAGIC_A
 
   const [newInstance] = applyChangesToInstance(instance, [change])
   return newInstance
+}
+
+function lessOrEqual(clock1: Clock, clock2: Clock) {
+  const keys : string[] = Object.keys(clock1).concat(Object.keys(clock2))
+  return keys.reduce((result, key) => (result && (clock1[key] || 0) <= (clock2[key] || 0)), true)
 }
