@@ -33,6 +33,7 @@ type ObjectType = 'list' | 'object'
 const ROOT_ID = '00000000-0000-0000-0000-000000000000'
 export const CAMBRIA_MAGIC_ACTOR = '0000000000'
 
+
 function deepInspect(object: any) {
   return inspect(object, false, null, true)
 }
@@ -46,6 +47,7 @@ export interface Instance {
   clock: Clock
   schema: string
   deps: Clock
+  elem: { [actor: string]: number }
   bootstrapped: boolean
   // seq: number; // for now, use clock instead -- multiple actors w/ different sequences
   state: BackendState
@@ -276,6 +278,7 @@ function initInstance(schema): Instance {
   const state = Backend.init()
   return {
     state,
+    elem: {},
     deps: {},
     schema,
     bootstrapped: false,
@@ -519,7 +522,7 @@ function applySchemaChanges(
     instance.bootstrapped = true
   }
 
-  // console.log("about to apply the final constructed change");
+  //console.log(`applying final changes to ${instance.schema}`, deepInspect(changesToApply))
   const [newInstance, patch] = applyChangesToInstance(instance, changesToApply)
 
   return [newInstance, patch, lensState]
@@ -598,24 +601,31 @@ function patchToOps(
         if (key === undefined || Number.isNaN(parseInt(key, 10))) {
           throw new Error(`Expected array index on path ${patchop.path}`)
         }
+
         const originalOp = origin.ops[opIndex]
-        const opKey = originalOp.key
 
         if (patchop.op === 'add') {
           const arrayIndex = parseInt(key, 10) - 1
           const insertAfter = findElemOfIndex(instance.state, objId, arrayIndex)
           if (insertAfter === null)
             throw new Error(`expected to find array element at ${arrayIndex} in ${patchop.path}`)
-          if (opKey === undefined) throw new Error(`expected key on op: ${originalOp}`)
-          const insertElemId = parseInt(opKey.split(':')[1], 10)
+          //if (originalOp.key === undefined) throw new Error(`expected key on op: ${originalOp}`)
+          const insertElemId = parseInt((originalOp.key ||"").split(':')[1], 10)
+          const elem = insertElemId || (instance.elem[origin.actor] || 0) + 1
+          key = `${origin.actor}:${elem}` 
           acc.push({
             action: 'ins',
             obj: objId,
             key: insertAfter,
-            elem: insertElemId,
+            elem
           })
+        } else {
+          const arrayIndex = parseInt(key, 10)
+          const insertAt = findElemOfIndex(instance.state, objId, arrayIndex)
+          if (insertAt === null) return []; // this element doesnt exist - do nothing
+          // this shouldnt be needed once we wrap defaults - todo
+          key = insertAt
         }
-        key = opKey
       }
 
       if (getObjType(instance.state, objId) === 'list') {
@@ -679,12 +689,13 @@ function findIndexOfElem(state: any, objId: ObjectId, insertKey: string): number
 }
 
 // given an automerge instance, an array obj id, and an index, return the elem ID
-function findElemOfIndex(state: any, objId: ObjectId, index: number): string {
+function findElemOfIndex(state: any, objId: ObjectId, index: number): string | null {
   if (index === -1) return '_head'
 
   const elemId = state.getIn(['opSet', 'byObject', objId, '_elemIds']).keyOf(index) // todo: is this the right way to look for an index in SkipList?
   if (elemId === undefined || elemId === null) {
-    throw new Error(`expected to find elem ID at index ${index} in obj ${objId}`)
+    return null
+    //throw new Error(`expected to find elem ID at index ${index} in obj ${objId}`)
   }
   return elemId
 }
@@ -756,7 +767,15 @@ export function opToPatch(op: Op, instance: Instance, elemCache: ElemCache): Clo
   switch (op.action) {
     case 'set': {
       // if the elemCache has the key, we're processing an insert
-      const action = op.key && elemCache[op.key] ? 'add' : 'replace'
+      //const action = op.key && elemCache[op.key] ? 'add' : 'replace'
+      let action
+      const objType = getObjType(instance.state, op.obj)
+      if (objType === "list") {
+        action = (op.key && elemCache[op.key] ? 'add' : 'replace')
+      } else {
+        const oldVal = getMapValue(instance.state, op.obj, op.key as string)
+        action = (oldVal === null ? "add" : "replace")
+      }
       const path = buildPath(op, instance, elemCache)
       const { value } = op
 
@@ -784,13 +803,19 @@ export function opToPatch(op: Op, instance: Instance, elemCache: ElemCache): Clo
 }
 
 function applyChangesToInstance(instance: Instance, changes: Change[]): [Instance, AutomergePatch] {
-  // console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
+  //console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
+  let elem = changes.reduce((acc, change) => {
+    const oldMax = acc[change.actor] || 0
+    const maxElem = Math.max(oldMax, ... change.ops.map(op => op.elem || 0))
+    return { ... acc, [change.actor]: maxElem }
+  }, instance.elem);
   const [backendState, patch] = Backend.applyChanges(instance.state, changes)
 
   return [
     {
       clock: patch.clock || {},
       schema: instance.schema,
+      elem,
       bootstrapped: true,
       deps: patch.deps || {},
       state: backendState,
@@ -817,3 +842,10 @@ function lessOrEqual(clock1: Clock, clock2: Clock) {
   const keys : string[] = Object.keys(clock1).concat(Object.keys(clock2))
   return keys.reduce((result, key) => (result && (clock1[key] || 0) <= (clock2[key] || 0)), true)
 }
+
+function getMapValue(state: any, obj: string, key: string) : any {
+  const value = state.getIn(['opSet', 'byObject', obj, '_keys',key, 0, 'value'])
+  //const value = objectKeys.getIn(['_keys', key, 0, 'value'])
+  return value
+}
+

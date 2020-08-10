@@ -2,7 +2,7 @@ import assert from 'assert'
 import { inspect } from 'util'
 import { addProperty, renameProperty, LensSource } from 'cloudina'
 import { Frontend } from 'automerge'
-import { inside, plungeProperty, removeProperty, hoistProperty, map } from 'cloudina/dist/helpers'
+import { inside, plungeProperty, removeProperty, wrapProperty, hoistProperty, map } from 'cloudina/dist/helpers'
 import * as Cambria from '../src/index'
 import { mkBlock } from '../src/cambriamerge'
 
@@ -910,6 +910,137 @@ describe('Has basic schema tools', () => {
           { id: '', name: 'Bobby' }, // id: '' got filled in as default
         ],
       })
+    })
+  })
+  describe('wrap/head behavior', () => {
+    const WRAP_LENSES = [
+    {
+      from: 'mu',
+      to: 'scalar',
+      lens: [
+        addProperty({ name: 'assignee', type: 'string', default: "Bob"  })
+      ],
+    },
+    {
+      from: 'scalar',
+      to: 'wrap',
+      lens: [
+        renameProperty('assignee', 'assignees'),
+        wrapProperty('assignees')
+      ],
+    } ]
+
+    interface WrapDoc {
+      assignees: string[]
+    }
+
+    interface ScalarDoc {
+      assignee: (string | null)
+    }
+
+    it('can handle wrap/head behavior', () => {
+      let wBack = Cambria.init({
+        schema: 'wrap',
+        lenses: WRAP_LENSES,
+      })
+      let sBack = Cambria.init({
+        schema: 'scalar',
+        lenses: WRAP_LENSES,
+      })
+      let change;
+      let request;
+      let patch;
+      let wFront = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(wBack))
+      let sFront = Frontend.applyPatch(Frontend.init(), Cambria.getPatch(sBack))
+
+      assert.deepEqual(wFront, { assignees: [] })
+      assert.deepEqual(sFront, { assignee: "Bob" })
+
+      ;[sFront, request] = Frontend.change(sFront, (doc: ScalarDoc) => {
+        doc.assignee = null
+      })
+      ;[sBack, patch, change] = Cambria.applyLocalChange(sBack, request)
+      sFront = Frontend.applyPatch(sFront,patch);
+
+      ;[wBack, patch ] = Cambria.applyChanges(wBack,[change])
+      wFront = Frontend.applyPatch(wFront,patch);
+
+      assert.deepEqual(wFront, { assignees: [] })
+      assert.deepEqual(sFront, { assignee: null })
+
+      ;[sFront, request] = Frontend.change(sFront, (doc: ScalarDoc) => {
+        doc.assignee = "Joe"
+      })
+      ;[sBack, patch, change] = Cambria.applyLocalChange(sBack, request)
+      sFront = Frontend.applyPatch(sFront,patch);
+
+      ;[wBack, patch ] = Cambria.applyChanges(wBack,[change])
+      wFront = Frontend.applyPatch(wFront,patch);
+
+      assert.deepEqual(wFront, { assignees: ["Joe"] })
+      assert.deepEqual(sFront, { assignee: "Joe" })
+
+      ;[sFront, request] = Frontend.change(sFront, (doc: ScalarDoc) => {
+        doc.assignee = "Tim"
+      })
+      ;[sBack, patch, change] = Cambria.applyLocalChange(sBack, request)
+      sFront = Frontend.applyPatch(sFront,patch);
+
+      ;[wBack, patch ] = Cambria.applyChanges(wBack,[change])
+      wFront = Frontend.applyPatch(wFront,patch);
+
+      assert.deepEqual(wFront, { assignees: ["Tim"] })
+      assert.deepEqual(sFront, { assignee: "Tim" })
+
+      ;[wFront, request] = Frontend.change(wFront, (doc: WrapDoc) => {
+        doc.assignees.push("Jill")
+      })
+      ;[wBack, patch, change] = Cambria.applyLocalChange(wBack, request)
+      wFront = Frontend.applyPatch(wFront,patch);
+      //console.log(deepInspect({ request, patch, change }));
+
+      ;[sBack, patch ] = Cambria.applyChanges(sBack,[change])
+      sFront = Frontend.applyPatch(sFront,patch);
+
+      assert.deepEqual(wFront, { assignees: ["Tim","Jill"] })
+      assert.deepEqual(sFront, { assignee: "Tim" })
+
+      ;[wFront, request] = Frontend.change(wFront, (doc: WrapDoc) => {
+        doc.assignees.shift()
+      })
+      ;[wBack, patch, change] = Cambria.applyLocalChange(wBack, request)
+      wFront = Frontend.applyPatch(wFront,patch);
+      //console.log(deepInspect({ request, patch, change }));
+
+      ;[sBack, patch ] = Cambria.applyChanges(sBack,[change])
+      sFront = Frontend.applyPatch(sFront,patch);
+
+      assert.deepEqual(wFront, { assignees: ["Jill"] })
+      assert.deepEqual(sFront, { assignee: null })
+
+      ;[wFront, request] = Frontend.change(wFront, (doc: WrapDoc) => {
+        doc.assignees[0] = "Lisa"
+      })
+      ;[wBack, patch, change] = Cambria.applyLocalChange(wBack, request)
+      wFront = Frontend.applyPatch(wFront,patch);
+
+      ;[sBack, patch ] = Cambria.applyChanges(sBack,[change])
+      sFront = Frontend.applyPatch(sFront,patch);
+
+      assert.deepEqual(wFront, { assignees: ["Lisa"] })
+      assert.deepEqual(sFront, { assignee: "Lisa" })
+
+      ;[wFront, request] = Frontend.change(wFront, (doc: WrapDoc) => {
+        doc.assignees.unshift("Biff")
+      })
+      ;[wBack, patch, change] = Cambria.applyLocalChange(wBack, request)
+      wFront = Frontend.applyPatch(wFront,patch);
+
+      ;[sBack, patch ] = Cambria.applyChanges(sBack,[change])
+      sFront = Frontend.applyPatch(sFront,patch);
+
+      assert.deepEqual(wFront, { assignees: ["Biff","Lisa"] })
+      assert.deepEqual(sFront, { assignee: "Biff" })
     })
   })
 })
