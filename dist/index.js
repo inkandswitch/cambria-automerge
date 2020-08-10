@@ -13,7 +13,7 @@ var automerge_1 = require("automerge");
 Object.defineProperty(exports, "Frontend", { enumerable: true, get: function () { return automerge_1.Frontend; } });
 Object.defineProperty(exports, "Text", { enumerable: true, get: function () { return automerge_1.Text; } });
 Object.defineProperty(exports, "change", { enumerable: true, get: function () { return automerge_1.change; } });
-var helpers_1 = require("cloudina/dist/helpers");
+var helpers_1 = require("cambria/dist/helpers");
 Object.defineProperty(exports, "inside", { enumerable: true, get: function () { return helpers_1.inside; } });
 Object.defineProperty(exports, "addProperty", { enumerable: true, get: function () { return helpers_1.addProperty; } });
 Object.defineProperty(exports, "plungeProperty", { enumerable: true, get: function () { return helpers_1.plungeProperty; } });
@@ -25,8 +25,10 @@ exports.Backend = {
     applyChanges: cambriamerge_3.applyChanges,
     applyLocalChange: cambriamerge_3.applyLocalChange,
     getChanges: cambriamerge_3.getChanges,
-    getPatch: cambriamerge_3.getPatch
+    getPatch: cambriamerge_3.getPatch,
+    getChangesForActor: cambriamerge_3.getChangesForActor,
+    getMissingChanges: cambriamerge_3.getMissingChanges,
+    getMissingDeps: cambriamerge_3.getMissingDeps,
+    merge: cambriamerge_3.merge
 };
-// missing functions
-// getChangesForActor, getMissingChanges, getMissingDeps, merge
 //# sourceMappingURL=index.js.map

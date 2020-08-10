@@ -8,7 +8,7 @@ import {
   Patch as CloudinaPatch,
   LensSource,
   applyLensToPatch,
-} from 'cloudina'
+} from 'cambria'
 
 import { v5 } from 'uuid'
 
@@ -153,7 +153,7 @@ export function getChangesForActor(doc: CambriaBackend, actor: string, after: nu
   return doc.history.filter((c) => c.change.actor === actor && c.change.seq > after)
 }
 
-export function getMissignDeps(doc: CambriaBackend) : Clock {
+export function getMissingDeps(doc: CambriaBackend) : Clock {
   return Backend.getMissingDeps(doc.primaryInstance().state)
 }
 
@@ -308,7 +308,7 @@ function convertOp(
   const convertedPatch = applyLensToPatch(lensStack, patch, jsonschema7)
   debug({ convertedPatch })
   // todo: optimization idea:
-  // if cloudina didn't do anything (convertedPatch deepEquals patch)
+  // if cambria didn't do anything (convertedPatch deepEquals patch)
   // then we should just be able to set convertedOps = [op]
 
   const convertedOps = patchToOps(convertedPatch, change, index, to)

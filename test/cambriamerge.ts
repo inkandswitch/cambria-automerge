@@ -1,8 +1,8 @@
 import assert from 'assert'
 import { inspect } from 'util'
-import { addProperty, renameProperty, LensSource } from 'cloudina'
+import { addProperty, renameProperty, LensSource } from 'cambria'
 import { Frontend } from 'automerge'
-import { inside, plungeProperty, removeProperty, wrapProperty, hoistProperty, map } from 'cloudina/dist/helpers'
+import { inside, plungeProperty, removeProperty, wrapProperty, hoistProperty, map } from 'cambria/dist/helpers'
 import * as Cambria from '../src/index'
 import { mkBlock } from '../src/cambriamerge'
 
@@ -800,7 +800,7 @@ describe('Has basic schema tools', () => {
     })
 
     it('can handle array deletes', () => {
-      // this lens has nothing to do with arrays but still pushes the patch thru cloudina
+      // this lens has nothing to do with arrays but still pushes the patch thru cambria
       const cambria = Cambria.init({
         schema: 'array-v2',
         lenses: [ARRAY_V1_LENS_CHANGE, ARRAY_V2_LENS_CHANGE],
@@ -868,7 +868,7 @@ describe('Has basic schema tools', () => {
     it('can insert/overwrite objects in array', () => {
       // In this test, we do a lens conversion from v1 to v2;
       // the v1->v2 lens doesn't affect the actual data but it does force cambriamerge
-      // to push the change through cloudina.
+      // to push the change through cambria.
       // So far these changes have all fields filled in in the newly inserted objects;
       // we don't test default value injection yet. (More on that below)
 

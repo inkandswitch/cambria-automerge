@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.opToPatch = exports.buildPath = exports.CambriaBackend = exports.merge = exports.getMissignDeps = exports.getChangesForActor = exports.getMissingChanges = exports.getChanges = exports.getPatch = exports.applyLocalChange = exports.applyChanges = exports.init = exports.mkBlock = exports.CAMBRIA_MAGIC_ACTOR = void 0;
+exports.opToPatch = exports.buildPath = exports.CambriaBackend = exports.merge = exports.getMissingDeps = exports.getChangesForActor = exports.getMissingChanges = exports.getChanges = exports.getPatch = exports.applyLocalChange = exports.applyChanges = exports.init = exports.mkBlock = exports.CAMBRIA_MAGIC_ACTOR = void 0;
 const immutable_1 = require("immutable");
-const cloudina_1 = require("cloudina");
+const cambria_1 = require("cambria");
 const uuid_1 = require("uuid");
 // This import doesn't pull in types for the Backend functions,
 // maybe because we're importing from a non-root file?
@@ -82,10 +82,10 @@ function getChangesForActor(doc, actor, after = 0) {
     return doc.history.filter((c) => c.change.actor === actor && c.change.seq > after);
 }
 exports.getChangesForActor = getChangesForActor;
-function getMissignDeps(doc) {
+function getMissingDeps(doc) {
     return automerge_1.Backend.getMissingDeps(doc.primaryInstance().state);
 }
-exports.getMissignDeps = getMissignDeps;
+exports.getMissingDeps = getMissingDeps;
 function merge(local, remote) {
     const changes = getMissingChanges(remote, local.primaryInstance().clock);
     return applyChanges(local, changes);
@@ -99,9 +99,9 @@ class CambriaBackend {
         this.lenses = lenses;
         this.lensState = {
             inDoc: immutable_1.Set(),
-            graph: lenses.reduce((graph, lens) => cloudina_1.registerLens(graph, lens.from, lens.to, lens.lens), cloudina_1.initLensGraph()),
+            graph: lenses.reduce((graph, lens) => cambria_1.registerLens(graph, lens.from, lens.to, lens.lens), cambria_1.initLensGraph()),
         };
-        cloudina_1.lensFromTo(this.lensState.graph, "mu", schema); // throws error if no valid path
+        cambria_1.lensFromTo(this.lensState.graph, "mu", schema); // throws error if no valid path
     }
     primaryInstance() {
         return this.getInstance(this.schema);
@@ -185,14 +185,14 @@ function convertOp(change, index, from, to, lensState, elemCache) {
     const op = change.ops[index];
     debug('\n convertOp pipeline:');
     debug({ from: from.schema, to: to.schema, op });
-    const lensStack = cloudina_1.lensFromTo(lensState.graph, from.schema, to.schema);
-    const jsonschema7 = cloudina_1.lensGraphSchema(lensState.graph, from.schema);
+    const lensStack = cambria_1.lensFromTo(lensState.graph, from.schema, to.schema);
+    const jsonschema7 = cambria_1.lensGraphSchema(lensState.graph, from.schema);
     const patch = opToPatch(op, from, elemCache);
     debug({ patch });
-    const convertedPatch = cloudina_1.applyLensToPatch(lensStack, patch, jsonschema7);
+    const convertedPatch = cambria_1.applyLensToPatch(lensStack, patch, jsonschema7);
     debug({ convertedPatch });
     // todo: optimization idea:
-    // if cloudina didn't do anything (convertedPatch deepEquals patch)
+    // if cambria didn't do anything (convertedPatch deepEquals patch)
     // then we should just be able to set convertedOps = [op]
     const convertedOps = patchToOps(convertedPatch, change, index, to);
     debug({ convertedOps });
@@ -318,7 +318,7 @@ function applySchemaChanges(blocks, instance, lensState, history) {
             const oldInDoc = lensState.inDoc;
             lensState = {
                 inDoc: oldInDoc.add(lens.to),
-                graph: cloudina_1.registerLens(lensState.graph, lens.from, lens.to, lens.lens),
+                graph: cambria_1.registerLens(lensState.graph, lens.from, lens.to, lens.lens),
             };
         }
         if (block.schema === instance.schema) {
@@ -353,11 +353,11 @@ function applySchemaChanges(blocks, instance, lensState, history) {
 }
 function bootstrap(instance, lensState) {
     const urOp = [{ op: 'add', path: '', value: {} }];
-    const jsonschema7 = cloudina_1.lensGraphSchema(lensState.graph, instance.schema);
+    const jsonschema7 = cambria_1.lensGraphSchema(lensState.graph, instance.schema);
     if (jsonschema7 === undefined) {
         throw new Error(`Could not find JSON schema for schema ${instance.schema}`);
     }
-    const defaultsPatch = cloudina_1.applyLensToPatch([], urOp, jsonschema7).slice(1);
+    const defaultsPatch = cambria_1.applyLensToPatch([], urOp, jsonschema7).slice(1);
     const bootstrapChange = {
         actor: exports.CAMBRIA_MAGIC_ACTOR,
         message: '',

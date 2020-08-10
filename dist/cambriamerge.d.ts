@@ -1,5 +1,5 @@
 import { Set } from 'immutable';
-import { LensGraph, Patch as CloudinaPatch, LensSource } from 'cloudina';
+import { LensGraph, Patch as CloudinaPatch, LensSource } from 'cambria';
 import { Op, Clock, Change, Patch as AutomergePatch, BackendState } from 'automerge';
 export declare const CAMBRIA_MAGIC_ACTOR = "0000000000";
 export interface LensState {
@@ -48,7 +48,7 @@ export declare function getPatch(doc: CambriaBackend): AutomergePatch;
 export declare function getChanges(oldState: CambriaBackend, newState: CambriaBackend): CambriaBlock[];
 export declare function getMissingChanges(doc: CambriaBackend, haveDeps: Clock): CambriaBlock[];
 export declare function getChangesForActor(doc: CambriaBackend, actor: string, after?: number): CambriaBlock[];
-export declare function getMissignDeps(doc: CambriaBackend): Clock;
+export declare function getMissingDeps(doc: CambriaBackend): Clock;
 export declare function merge(local: CambriaBackend, remote: CambriaBackend): [CambriaBackend, AutomergePatch];
 export declare class CambriaBackend {
     schema: string;
