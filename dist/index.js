@@ -27,4 +27,6 @@ exports.Backend = {
     getChanges: cambriamerge_3.getChanges,
     getPatch: cambriamerge_3.getPatch
 };
+// missing functions
+// getChangesForActor, getMissingChanges, getMissingDeps, merge
 //# sourceMappingURL=index.js.map

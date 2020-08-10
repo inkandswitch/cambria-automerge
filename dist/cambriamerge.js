@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.opToPatch = exports.buildPath = exports.CambriaBackend = exports.getChanges = exports.getPatch = exports.applyLocalChange = exports.applyChanges = exports.init = exports.mkBlock = exports.CAMBRIA_MAGIC_ACTOR = void 0;
+exports.opToPatch = exports.buildPath = exports.CambriaBackend = exports.merge = exports.getMissignDeps = exports.getChangesForActor = exports.getMissingChanges = exports.getChanges = exports.getPatch = exports.applyLocalChange = exports.applyChanges = exports.init = exports.mkBlock = exports.CAMBRIA_MAGIC_ACTOR = void 0;
 const immutable_1 = require("immutable");
 const cloudina_1 = require("cloudina");
 const uuid_1 = require("uuid");
@@ -65,10 +65,32 @@ function getPatch(doc) {
     return patch;
 }
 exports.getPatch = getPatch;
-function getChanges(doc, haveDeps) {
-    return doc.getChanges(haveDeps);
+function getChanges(oldState, newState) {
+    const newClock = newState.primaryInstance().clock;
+    const oldClock = oldState.primaryInstance().clock;
+    if (!lessOrEqual(oldClock, newClock)) {
+        throw new RangeError('Cannot diff two states that have diverged');
+    }
+    return newState.getMissingChanges(oldClock);
 }
 exports.getChanges = getChanges;
+function getMissingChanges(doc, haveDeps) {
+    return doc.getMissingChanges(haveDeps);
+}
+exports.getMissingChanges = getMissingChanges;
+function getChangesForActor(doc, actor, after = 0) {
+    return doc.history.filter((c) => c.change.actor === actor && c.change.seq > after);
+}
+exports.getChangesForActor = getChangesForActor;
+function getMissignDeps(doc) {
+    return automerge_1.Backend.getMissingDeps(doc.primaryInstance().state);
+}
+exports.getMissignDeps = getMissignDeps;
+function merge(local, remote) {
+    const changes = getMissingChanges(remote, local.primaryInstance().clock);
+    return applyChanges(local, changes);
+}
+exports.merge = merge;
 class CambriaBackend {
     constructor({ schema = 'mu', lenses = [] }) {
         this.schema = schema;
@@ -80,6 +102,9 @@ class CambriaBackend {
             graph: lenses.reduce((graph, lens) => cloudina_1.registerLens(graph, lens.from, lens.to, lens.lens), cloudina_1.initLensGraph()),
         };
         cloudina_1.lensFromTo(this.lensState.graph, "mu", schema); // throws error if no valid path
+    }
+    primaryInstance() {
+        return this.getInstance(this.schema);
     }
     applyLocalChange(request) {
         let lenses = [];
@@ -131,7 +156,7 @@ class CambriaBackend {
         this.lensState = newLensState;
         return patch;
     }
-    getChanges(haveDeps) {
+    getMissingChanges(haveDeps) {
         return this.history.filter((block) => block.change.seq > (haveDeps[block.change.actor] || 0));
     }
     getInstance(schema) {
@@ -146,6 +171,7 @@ function initInstance(schema) {
     const state = automerge_1.Backend.init();
     return {
         state,
+        elem: {},
         deps: {},
         schema,
         bootstrapped: false,
@@ -321,7 +347,7 @@ function applySchemaChanges(blocks, instance, lensState, history) {
         changesToApply.unshift(bootstrapChange);
         instance.bootstrapped = true;
     }
-    // console.log("about to apply the final constructed change");
+    //console.log(`applying final changes to ${instance.schema}`, deepInspect(changesToApply))
     const [newInstance, patch] = applyChangesToInstance(instance, changesToApply);
     return [newInstance, patch, lensState];
 }
@@ -390,23 +416,30 @@ function patchToOps(patch, origin, opIndex, instance) {
                 throw new Error(`Expected array index on path ${patchop.path}`);
             }
             const originalOp = origin.ops[opIndex];
-            const opKey = originalOp.key;
             if (patchop.op === 'add') {
                 const arrayIndex = parseInt(key, 10) - 1;
                 const insertAfter = findElemOfIndex(instance.state, objId, arrayIndex);
                 if (insertAfter === null)
                     throw new Error(`expected to find array element at ${arrayIndex} in ${patchop.path}`);
-                if (opKey === undefined)
-                    throw new Error(`expected key on op: ${originalOp}`);
-                const insertElemId = parseInt(opKey.split(':')[1], 10);
+                //if (originalOp.key === undefined) throw new Error(`expected key on op: ${originalOp}`)
+                const insertElemId = parseInt((originalOp.key || "").split(':')[1], 10);
+                const elem = insertElemId || (instance.elem[origin.actor] || 0) + 1;
+                key = `${origin.actor}:${elem}`;
                 acc.push({
                     action: 'ins',
                     obj: objId,
                     key: insertAfter,
-                    elem: insertElemId,
+                    elem
                 });
             }
-            key = opKey;
+            else {
+                const arrayIndex = parseInt(key, 10);
+                const insertAt = findElemOfIndex(instance.state, objId, arrayIndex);
+                if (insertAt === null)
+                    return []; // this element doesnt exist - do nothing
+                // this shouldnt be needed once we wrap defaults - todo
+                key = insertAt;
+            }
         }
         if (getObjType(instance.state, objId) === 'list') {
             // todo: maybe need to do some stuff here for object-in-array?
@@ -473,7 +506,8 @@ function findElemOfIndex(state, objId, index) {
         return '_head';
     const elemId = state.getIn(['opSet', 'byObject', objId, '_elemIds']).keyOf(index); // todo: is this the right way to look for an index in SkipList?
     if (elemId === undefined || elemId === null) {
-        throw new Error(`expected to find elem ID at index ${index} in obj ${objId}`);
+        return null;
+        //throw new Error(`expected to find elem ID at index ${index} in obj ${objId}`)
     }
     return elemId;
 }
@@ -537,7 +571,16 @@ function opToPatch(op, instance, elemCache) {
     switch (op.action) {
         case 'set': {
             // if the elemCache has the key, we're processing an insert
-            const action = op.key && elemCache[op.key] ? 'add' : 'replace';
+            //const action = op.key && elemCache[op.key] ? 'add' : 'replace'
+            let action;
+            const objType = getObjType(instance.state, op.obj);
+            if (objType === "list") {
+                action = (op.key && elemCache[op.key] ? 'add' : 'replace');
+            }
+            else {
+                const oldVal = getMapValue(instance.state, op.obj, op.key);
+                action = (oldVal === null ? "add" : "replace");
+            }
             const path = buildPath(op, instance, elemCache);
             const { value } = op;
             return [{ op: action, path, value }];
@@ -563,12 +606,18 @@ function opToPatch(op, instance, elemCache) {
 }
 exports.opToPatch = opToPatch;
 function applyChangesToInstance(instance, changes) {
-    // console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
+    //console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
+    let elem = changes.reduce((acc, change) => {
+        const oldMax = acc[change.actor] || 0;
+        const maxElem = Math.max(oldMax, ...change.ops.map(op => op.elem || 0));
+        return Object.assign(Object.assign({}, acc), { [change.actor]: maxElem });
+    }, instance.elem);
     const [backendState, patch] = automerge_1.Backend.applyChanges(instance.state, changes);
     return [
         {
             clock: patch.clock || {},
             schema: instance.schema,
+            elem,
             bootstrapped: true,
             deps: patch.deps || {},
             state: backendState,
@@ -587,5 +636,14 @@ function applyOps(instance, ops, actor = exports.CAMBRIA_MAGIC_ACTOR) {
     };
     const [newInstance] = applyChangesToInstance(instance, [change]);
     return newInstance;
+}
+function lessOrEqual(clock1, clock2) {
+    const keys = Object.keys(clock1).concat(Object.keys(clock2));
+    return keys.reduce((result, key) => (result && (clock1[key] || 0) <= (clock2[key] || 0)), true);
+}
+function getMapValue(state, obj, key) {
+    const value = state.getIn(['opSet', 'byObject', obj, '_keys', key, 0, 'value']);
+    //const value = objectKeys.getIn(['_keys', key, 0, 'value'])
+    return value;
 }
 //# sourceMappingURL=cambriamerge.js.map
