@@ -4,16 +4,11 @@ exports.opToPatch = exports.buildPath = exports.CambriaBackend = exports.merge =
 const immutable_1 = require("immutable");
 const cambria_1 = require("cambria");
 const uuid_1 = require("uuid");
-// This import doesn't pull in types for the Backend functions,
-// maybe because we're importing from a non-root file?
 const automerge_1 = require("automerge");
 const util_1 = require("util");
 const MAGIC_UUID = 'f1bb7a0b-2d26-48ca-aaa3-92c63bbb5c50';
-// applyPatch PATCH needs to become - buildChange
-// buildChange needs to incrementally track op state re 'make' - list 'insert' 'del'
-// need to track deps/clock differently at the top level than at the instance level
-// seq will be different b/c of lenses
 const ROOT_ID = '00000000-0000-0000-0000-000000000000';
+// we use this actor to create the phantom defaults change everything depends on
 exports.CAMBRIA_MAGIC_ACTOR = '0000000000';
 function deepInspect(object) {
     return util_1.inspect(object, false, null, true);
@@ -35,9 +30,11 @@ exports.init = init;
 function applyChanges(doc, changes) {
     const patch = doc.applyChanges(changes);
     if (patch && patch.clock) {
+        // hide the phantom defaults change
         delete patch.clock[exports.CAMBRIA_MAGIC_ACTOR];
     }
     if (patch && patch.deps) {
+        // hide the phantom defaults change
         delete patch.deps[exports.CAMBRIA_MAGIC_ACTOR];
     }
     return [doc, patch];
@@ -46,9 +43,11 @@ exports.applyChanges = applyChanges;
 function applyLocalChange(doc, request) {
     const [patch, block] = doc.applyLocalChange(request);
     if (patch && patch.clock) {
+        // hide the phantom defaults change
         delete patch.clock[exports.CAMBRIA_MAGIC_ACTOR];
     }
     if (patch && patch.deps) {
+        // hide the phantom defaults change
         delete patch.deps[exports.CAMBRIA_MAGIC_ACTOR];
     }
     return [doc, patch, block];
@@ -57,9 +56,11 @@ exports.applyLocalChange = applyLocalChange;
 function getPatch(doc) {
     const patch = doc.getPatch();
     if (patch && patch.clock) {
+        // hide the phantom defaults change
         delete patch.clock[exports.CAMBRIA_MAGIC_ACTOR];
     }
     if (patch && patch.deps) {
+        // hide the phantom defaults change
         delete patch.deps[exports.CAMBRIA_MAGIC_ACTOR];
     }
     return patch;
@@ -109,7 +110,7 @@ class CambriaBackend {
     applyLocalChange(request) {
         let lenses = [];
         if (!this.lensState.inDoc.has(this.schema)) {
-            lenses = this.lenses; // todo - dont have to put them ALL in
+            lenses = this.lenses; // todo - dont have to put them ALL in - filter out just what we need 
             this.lensState.inDoc = this.lensState.inDoc.union(immutable_1.Set(this.lenses.map((l) => l.to)));
         }
         const block = {
@@ -119,12 +120,14 @@ class CambriaBackend {
             actor: request.actor,
             seq: request.seq,
         };
+        // first local change always depends on the phantom defaults 
         if (request.seq === 1) {
             request.deps[exports.CAMBRIA_MAGIC_ACTOR] = 1;
         }
         let instance = this.getInstance(this.schema);
         let bootdiffs = [];
         this.history.push(block);
+        // bootstrapping is the process of applying the defaults to the instance
         if (!instance.bootstrapped) {
             const bootstrapChange = bootstrap(instance, this.lensState);
             const [newInstance, bootPatch] = applyChangesToInstance(instance, [bootstrapChange]);
@@ -136,6 +139,7 @@ class CambriaBackend {
         instance.clock = patch.clock || {};
         instance.deps = patch.deps || {};
         this.instances[this.schema] = instance;
+        // add the bootstrap diffs to the patch
         patch.diffs.unshift(...bootdiffs);
         return [patch, block];
     }
@@ -314,7 +318,6 @@ function applySchemaChanges(blocks, instance, lensState, history) {
     let toInstance;
     for (const block of blocks) {
         for (const lens of block.lenses) {
-            // FIXME
             const oldInDoc = lensState.inDoc;
             lensState = {
                 inDoc: oldInDoc.add(lens.to),
@@ -322,6 +325,7 @@ function applySchemaChanges(blocks, instance, lensState, history) {
             };
         }
         if (block.schema === instance.schema) {
+            // no need to migrate - we're in the correct schema now
             changesToApply.push(block.change);
         }
         else {
@@ -331,6 +335,10 @@ function applySchemaChanges(blocks, instance, lensState, history) {
             // copy our main instance before passing into convertChange;
             // convertChange is going to incrementally play ops into the copy
             // we also need to bootstrap it before starting to incrementally apply ops
+            // we incrementally apply ops b/c each op could change the path lookup of the following ops
+            // we then throw these changes away once the altered change is created and then apply it
+            // in effect each op gets applied at least 3 times here - this could be much faster with a 
+            // smater implementation
             toInstance = toInstance || Object.assign({}, instance);
             if (!toInstance.bootstrapped) {
                 const bootstrapChange = bootstrap(toInstance, lensState);
@@ -347,7 +355,6 @@ function applySchemaChanges(blocks, instance, lensState, history) {
         changesToApply.unshift(bootstrapChange);
         instance.bootstrapped = true;
     }
-    //console.log(`applying final changes to ${instance.schema}`, deepInspect(changesToApply))
     const [newInstance, patch] = applyChangesToInstance(instance, changesToApply);
     return [newInstance, patch, lensState];
 }
@@ -358,6 +365,7 @@ function bootstrap(instance, lensState) {
         throw new Error(`Could not find JSON schema for schema ${instance.schema}`);
     }
     const defaultsPatch = cambria_1.applyLensToPatch([], urOp, jsonschema7).slice(1);
+    //  here is our phantom defaults change
     const bootstrapChange = {
         actor: exports.CAMBRIA_MAGIC_ACTOR,
         message: '',
@@ -372,7 +380,6 @@ function bootstrap(instance, lensState) {
 function patchToOps(patch, origin, opIndex, instance) {
     // as we create objects in our conversion process, remember object IDs by path
     const pathCache = { '': ROOT_ID };
-    // todo: see if we can refactor to have TS tell us what's missing here
     const ops = patch
         .map((patchop, i) => {
         const acc = [];
@@ -409,7 +416,6 @@ function patchToOps(patch, origin, opIndex, instance) {
         const pathParts = patchop.path.split('/');
         let key = pathParts.pop();
         const objPath = pathParts.join('/');
-        // console.log({ pathCache })
         const objId = pathCache[objPath] || getObjId(instance.state, objPath);
         if (getObjType(instance.state, objId) === 'list') {
             if (key === undefined || Number.isNaN(parseInt(key, 10))) {
@@ -421,7 +427,6 @@ function patchToOps(patch, origin, opIndex, instance) {
                 const insertAfter = findElemOfIndex(instance.state, objId, arrayIndex);
                 if (insertAfter === null)
                     throw new Error(`expected to find array element at ${arrayIndex} in ${patchop.path}`);
-                //if (originalOp.key === undefined) throw new Error(`expected key on op: ${originalOp}`)
                 const insertElemId = parseInt((originalOp.key || "").split(':')[1], 10);
                 const elem = insertElemId || (instance.elem[origin.actor] || 0) + 1;
                 key = `${origin.actor}:${elem}`;
@@ -437,13 +442,8 @@ function patchToOps(patch, origin, opIndex, instance) {
                 const insertAt = findElemOfIndex(instance.state, objId, arrayIndex);
                 if (insertAt === null)
                     return []; // this element doesnt exist - do nothing
-                // this shouldnt be needed once we wrap defaults - todo
                 key = insertAt;
             }
-        }
-        if (getObjType(instance.state, objId) === 'list') {
-            // todo: maybe need to do some stuff here for object-in-array?
-            // look up the obj, generate the makeMap/link ops?
         }
         if (objId === undefined)
             throw new Error(`Could not find object with path ${objPath}`);
@@ -459,7 +459,6 @@ function patchToOps(patch, origin, opIndex, instance) {
             const op = { action, obj: objId, key };
             acc.push(op);
         }
-        // console.log('converted one patchop', { patchop, acc })
         return acc;
     })
         .flat();
@@ -481,6 +480,7 @@ function buildPath(op, instance, elemCache) {
                 throw new Error('expected key on insert op');
             delete elemCache[key];
             key = prevKey;
+            // plus one because we're looking up the element we're inserting after
             arrayIndex = findIndexOfElem(instance.state, obj, key) + 1;
         }
         else {
@@ -507,7 +507,6 @@ function findElemOfIndex(state, objId, index) {
     const elemId = state.getIn(['opSet', 'byObject', objId, '_elemIds']).keyOf(index); // todo: is this the right way to look for an index in SkipList?
     if (elemId === undefined || elemId === null) {
         return null;
-        //throw new Error(`expected to find elem ID at index ${index} in obj ${objId}`)
     }
     return elemId;
 }
@@ -606,7 +605,6 @@ function opToPatch(op, instance, elemCache) {
 }
 exports.opToPatch = opToPatch;
 function applyChangesToInstance(instance, changes) {
-    //console.log(`applying changes to ${instance.schema}`, deepInspect(changes))
     let elem = changes.reduce((acc, change) => {
         const oldMax = acc[change.actor] || 0;
         const maxElem = Math.max(oldMax, ...change.ops.map(op => op.elem || 0));
@@ -626,7 +624,6 @@ function applyChangesToInstance(instance, changes) {
     ];
 }
 function applyOps(instance, ops, actor = exports.CAMBRIA_MAGIC_ACTOR) {
-    // construct a change out of the ops
     const change = {
         ops,
         message: '',
@@ -643,7 +640,6 @@ function lessOrEqual(clock1, clock2) {
 }
 function getMapValue(state, obj, key) {
     const value = state.getIn(['opSet', 'byObject', obj, '_keys', key, 0, 'value']);
-    //const value = objectKeys.getIn(['_keys', key, 0, 'value'])
     return value;
 }
 //# sourceMappingURL=cambriamerge.js.map
