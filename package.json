@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc --outDir ./dist",
     "test": "mocha -r ts-node/register test/**.ts",
-    "postinstall": "yarn install && yarn run build"
+    "prepare": "yarn run build"
   },
   "dependencies": {
     "automerge": "0.14.1",
