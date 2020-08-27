@@ -351,7 +351,7 @@ callsites@^3.0.0:
 
 "cambria@ssh://git@github.com:inkandswitch/cambria.git":
   version "0.1.1"
-  resolved "ssh://git@github.com:inkandswitch/cambria.git#bccee530b1d56d499429847c962d18a348a5c5e4"
+  resolved "ssh://git@github.com:inkandswitch/cambria.git#332b06ba2f1f272a59432963cb1b3e0e31437d82"
   dependencies:
     commander "^5.1.0"
     fast-json-patch "^3.0.0-1"
